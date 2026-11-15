@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Pressable,
+  RefreshControl,
   ScrollView,
   StatusBar,
   StyleSheet,
@@ -9,369 +10,355 @@ import {
   View,
 } from "react-native";
 
-const API_URL = process.env.EXPO_PUBLIC_API_URL ?? "http://10.0.2.2:4000/api";
-const LIME = "#B5FF55";
-const MUTED = "#849087";
+const API = (process.env.EXPO_PUBLIC_API_URL ?? "http://10.0.2.2:4000/api").replace(/\/$/, "");
+const C = {
+  bg: "#080B09", panel: "#101612", panel2: "#0C110E", line: "#202B23",
+  lime: "#B5FF55", text: "#F2F5F1", muted: "#829087", faint: "#59665D",
+  red: "#F07880", amber: "#E5B15D", blue: "#82B9E8",
+};
 const TIMEFRAMES = ["M1", "M5", "M15", "M30", "H1", "H4", "D1", "W1"] as const;
-const SYMBOLS = ["XAUUSD", "EURUSD", "GBPUSD", "USDJPY", "XAGUSD"] as const;
-
 type Timeframe = (typeof TIMEFRAMES)[number];
-type Candle = { time: string; open: number; high: number; low: number; close: number };
-type Quote = { instrument: string; last?: number; bid?: number; ask?: number; asOf: string; delayed?: boolean };
-type Tab = "Terminal" | "Markets" | "AI Lab" | "Signals" | "Portfolio";
+type Tab = "Terminal" | "Markets" | "Analysis" | "Fundamentals" | "Signals";
+type Quote = { instrument: string; asOf: string; bid?: number; ask?: number; last?: number; change?: number; changePercent?: number; delayed?: boolean };
+type Candle = { time: string; open: number; high: number; low: number; close: number; volume?: number };
+type Instrument = { symbol: string; displayName: string; category: string; pricePrecision?: number };
+type Event = { id: string; time: string; country: string; currency: string; event: string; impact: "high" | "medium" | "low" | "unknown"; actual: number | null; estimate: number | null; previous: number | null; unit?: string; currencyBias: string; affectedPairs: { symbol: string; bias: string }[] };
+type Signal = { id: string; instrument: string; type: "setup" | "bias"; direction: string; confidence: number; timeframe: string; title: string; summary: string; createdAt: string; entry?: number; stopLoss?: number; takeProfit?: number; riskReward?: number; tags?: string[] };
+type ProviderStatus = { state: "connected" | "unconfigured" | "disconnected"; provider: string | null; message: string; updatedAt?: string; delayed?: boolean };
 
-function formatPrice(value?: number) {
-  if (value === undefined || !Number.isFinite(value)) return "—";
-  return value.toFixed(value > 100 ? 2 : 5);
+async function request<T>(path: string): Promise<T> {
+  const response = await fetch(\`\${API}\${path}\`);
+  if (!response.ok) throw new Error(\`Request failed (\${response.status})\`);
+  return response.json() as Promise<T>;
 }
-
+function price(value?: number, precision?: number) {
+  if (value === undefined || value === null || !Number.isFinite(value)) return "—";
+  return value.toLocaleString("en-US", { minimumFractionDigits: precision ?? (value > 100 ? 2 : 5), maximumFractionDigits: precision ?? (value > 100 ? 2 : 5) });
+}
+function clock(value?: string) {
+  if (!value) return "—";
+  const d = new Date(value);
+  return Number.isNaN(d.getTime()) ? "—" : d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+}
+function dateLabel(value: string) {
+  const d = new Date(value);
+  return Number.isNaN(d.getTime()) ? value : d.toLocaleDateString([], { weekday: "short", day: "numeric", month: "short" });
+}
+function directionColor(value?: string) {
+  const v = (value ?? "").toLowerCase();
+  return v === "bullish" ? C.lime : v === "bearish" ? C.red : v === "pending" ? C.amber : C.muted;
+}
+function Panel({ children, style }: { children: React.ReactNode; style?: object }) {
+  return <View style={[s.panel, style]}>{children}</View>;
+}
+function Eyebrow({ children }: { children: React.ReactNode }) {
+  return <Text style={s.eyebrow}>{children}</Text>;
+}
+function SectionTitle({ title, right }: { title: string; right?: string }) {
+  return <View style={s.sectionHead}><Text style={s.sectionTitle}>{title}</Text>{right ? <Text style={s.sectionRight}>{right}</Text> : null}</View>;
+}
+function StatusPill({ status, label }: { status: string; label?: string }) {
+  const good = status === "connected";
+  return <View style={s.statusPill}><View style={[s.dot, { backgroundColor: good ? C.lime : status === "checking" ? C.amber : C.red }]} /><Text style={s.statusText}>{label ?? (good ? "LIVE" : status === "checking" ? "CONNECTING" : "OFFLINE")}</Text></View>;
+}
+function Empty({ title, detail, action, onAction }: { title: string; detail: string; action?: string; onAction?: () => void }) {
+  return <View style={s.empty}><View style={s.emptyMark}><Text style={s.emptyMarkText}>—</Text></View><Text style={s.emptyTitle}>{title}</Text><Text style={s.emptyDetail}>{detail}</Text>{action && onAction ? <Pressable onPress={onAction} style={s.outlineButton}><Text style={s.outlineText}>{action}</Text></Pressable> : null}</View>;
+}
 function CandleStick({ candle, min, max }: { candle: Candle; min: number; max: number }) {
-  const range = Math.max(max - min, 0.00001);
+  const range = Math.max(max - min, 0.000001);
   const top = ((max - candle.high) / range) * 100;
   const bottom = ((max - candle.low) / range) * 100;
   const bodyTop = ((max - Math.max(candle.open, candle.close)) / range) * 100;
   const bodyBottom = ((max - Math.min(candle.open, candle.close)) / range) * 100;
-  const bullish = candle.close >= candle.open;
-  const color = bullish ? LIME : "#F06F78";
-  return (
-    <View style={styles.candleSlot}>
-      <View style={[styles.wick, { top: `${top}%`, height: `${Math.max(bottom - top, 1)}%`, backgroundColor: color }]} />
-      <View style={[styles.candleBody, { top: `${bodyTop}%`, height: `${Math.max(bodyBottom - bodyTop, 1.2)}%`, backgroundColor: color }]} />
-    </View>
-  );
+  const color = candle.close >= candle.open ? C.lime : C.red;
+  return <View style={s.candleSlot}><View style={[s.wick, { top: \`\${top}%\`, height: \`\${Math.max(bottom - top, 1)}%\`, backgroundColor: color }]} /><View style={[s.candleBody, { top: \`\${bodyTop}%\`, height: \`\${Math.max(bodyBottom - bodyTop, 1.2)}%\`, backgroundColor: color }]} /></View>;
 }
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<Tab>("Terminal");
-  const [symbol, setSymbol] = useState<string>("XAUUSD");
+  const [tab, setTab] = useState<Tab>("Terminal");
+  const [symbol, setSymbol] = useState("XAUUSD");
   const [timeframe, setTimeframe] = useState<Timeframe>("H1");
-  const [quote, setQuote] = useState<Quote | null>(null);
+  const [quotes, setQuotes] = useState<Quote[]>([]);
+  const [instruments, setInstruments] = useState<Instrument[]>([]);
   const [candles, setCandles] = useState<Candle[]>([]);
-  const [connection, setConnection] = useState<"checking" | "connected" | "offline">("checking");
-  const [loadingChart, setLoadingChart] = useState(false);
-  const [lastUpdated, setLastUpdated] = useState("");
+  const [events, setEvents] = useState<Event[]>([]);
+  const [signals, setSignals] = useState<Signal[]>([]);
+  const [marketStatus, setMarketStatus] = useState<ProviderStatus | null>(null);
+  const [fundStatus, setFundStatus] = useState<ProviderStatus | null>(null);
+  const [signalStatus, setSignalStatus] = useState<ProviderStatus | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [errors, setErrors] = useState<Record<string, string>>({});
 
-  const loadMarket = useCallback(async () => {
-    try {
-      const [statusResponse, quotesResponse] = await Promise.all([
-        fetch(`${API_URL}/market-data/status`),
-        fetch(`${API_URL}/market-data/quotes`),
-      ]);
-      if (!statusResponse.ok) throw new Error("Market service unavailable");
-      const status = await statusResponse.json();
-      if (status.state !== "connected") {
-        setConnection("offline");
-        setQuote(null);
-        return;
-      }
-      setConnection("connected");
-      if (quotesResponse.ok) {
-        const quotes: Quote[] = await quotesResponse.json();
-        setQuote(quotes.find((item) => item.instrument === symbol) ?? null);
-        setLastUpdated(new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }));
-      }
-    } catch {
-      setConnection("offline");
-      setQuote(null);
-    }
-  }, [symbol]);
+  const quote = quotes.find((item) => item.instrument === symbol) ?? null;
+  const instrument = instruments.find((item) => item.symbol === symbol);
+  const chart = useMemo(() => candles.slice(-48), [candles]);
+  const bounds = useMemo(() => chart.length ? {
+    min: Math.min(...chart.map((item) => item.low)),
+    max: Math.max(...chart.map((item) => item.high)),
+  } : { min: 0, max: 1 }, [chart]);
+  const selectedSignals = signals.filter((item) => item.instrument === symbol);
+
+  const loadBase = useCallback(async () => {
+    const results = await Promise.allSettled([
+      request<ProviderStatus>("/market-data/status"),
+      request<Quote[]>("/market-data/quotes"),
+      request<Instrument[]>("/market-data/instruments"),
+      request<ProviderStatus>("/fundamentals/status"),
+      request<Event[]>("/fundamentals/calendar"),
+      request<ProviderStatus>("/signals/status"),
+      request<Signal[]>("/signals"),
+    ]);
+    const nextErrors: Record<string, string> = {};
+    const [ms, qs, ins, fs, es, ss, sigs] = results;
+    if (ms.status === "fulfilled") setMarketStatus(ms.value); else nextErrors.market = "Market data service unavailable";
+    if (qs.status === "fulfilled") setQuotes(qs.value); else { setQuotes([]); nextErrors.quotes = "Quotes unavailable"; }
+    if (ins.status === "fulfilled") setInstruments(ins.value); else setInstruments([]);
+    if (fs.status === "fulfilled") setFundStatus(fs.value); else nextErrors.fundamentals = "Economic calendar unavailable";
+    if (es.status === "fulfilled") setEvents(es.value); else setEvents([]);
+    if (ss.status === "fulfilled") setSignalStatus(ss.value); else nextErrors.signals = "Signal service unavailable";
+    if (sigs.status === "fulfilled") setSignals(sigs.value); else setSignals([]);
+    setErrors(nextErrors);
+  }, []);
 
   const loadHistory = useCallback(async () => {
-    setLoadingChart(true);
     try {
-      const response = await fetch(
-        `${API_URL}/market-data/history?instrument=${encodeURIComponent(symbol)}&timeframe=${timeframe}`,
-      );
-      if (!response.ok) throw new Error("History unavailable");
-      const data: Candle[] = await response.json();
+      const data = await request<Candle[]>(\`/market-data/history?instrument=\${encodeURIComponent(symbol)}&timeframe=\${timeframe}\`);
       setCandles(data);
     } catch {
       setCandles([]);
-    } finally {
-      setLoadingChart(false);
     }
   }, [symbol, timeframe]);
 
-  useEffect(() => {
-    void loadMarket();
-    void loadHistory();
-  }, [loadMarket, loadHistory]);
+  const refresh = useCallback(async () => {
+    setLoading(true);
+    await Promise.all([loadBase(), loadHistory()]);
+    setLoading(false);
+  }, [loadBase, loadHistory]);
 
-  const chartCandles = useMemo(() => candles.slice(-36), [candles]);
-  const chartRange = useMemo(() => {
-    if (!chartCandles.length) return { min: 0, max: 1 };
-    return {
-      min: Math.min(...chartCandles.map((item) => item.low)),
-      max: Math.max(...chartCandles.map((item) => item.high)),
-    };
-  }, [chartCandles]);
+  useEffect(() => { void refresh(); }, [refresh]);
 
   const renderTerminal = () => (
     <>
-      <View style={styles.instrumentHeader}>
-        <View>
-          <Text style={styles.eyebrow}>MARKET / SPOT</Text>
-          <View style={styles.instrumentNameRow}>
-            <Text style={styles.instrumentName}>{symbol}</Text>
-            <Text style={styles.chevron}>⌄</Text>
-          </View>
-          <Text style={styles.instrumentSub}>{symbol === "XAUUSD" ? "Gold / US Dollar" : "Market instrument"}</Text>
+      <View style={s.instrumentHeader}>
+        <View style={{ flex: 1 }}>
+          <Eyebrow>SPOT MARKET</Eyebrow>
+          <Text style={s.instrumentName}>{symbol}</Text>
+          <Text style={s.instrumentSub}>{instrument?.displayName ?? (symbol === "XAUUSD" ? "Gold / US Dollar" : "Selected instrument")}</Text>
         </View>
-        <View style={styles.priceBlock}>
-          <Text style={styles.lastPrice}>{formatPrice(quote?.last)}</Text>
-          <Text style={styles.priceCaption}>{quote?.delayed ? "DELAYED DATA" : quote ? "LATEST QUOTE" : "WAITING FOR FEED"}</Text>
+        <View style={s.priceBlock}>
+          <Text style={s.lastPrice}>{price(quote?.last, instrument?.pricePrecision)}</Text>
+          <Text style={[s.changeText, { color: (quote?.change ?? 0) >= 0 ? C.lime : C.red }]}>{quote?.changePercent === undefined ? "—" : \`\${quote.changePercent >= 0 ? "+" : ""}\${quote.changePercent.toFixed(2)}%\`}</Text>
         </View>
       </View>
-
-      <View style={styles.symbolPicker}>
-        {SYMBOLS.map((item) => (
-          <Pressable key={item} onPress={() => setSymbol(item)} style={[styles.symbolChip, symbol === item && styles.symbolChipActive]}>
-            <Text style={[styles.symbolChipText, symbol === item && styles.symbolChipTextActive]}>{item}</Text>
-          </Pressable>
-        ))}
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.symbolRail} contentContainerStyle={s.symbolRailContent}>
+        {(instruments.length ? instruments : [{ symbol: "XAUUSD", displayName: "Gold / US Dollar", category: "metals" }]).map((item) =>
+          <Pressable key={item.symbol} onPress={() => setSymbol(item.symbol)} style={[s.symbolChip, symbol === item.symbol && s.symbolChipActive]}><Text style={[s.symbolChipText, symbol === item.symbol && s.symbolChipTextActive]}>{item.symbol}</Text></Pressable>
+        )}
+      </ScrollView>
+      <Panel style={{ padding: 12 }}>
+        <View style={s.chartHeader}><View style={s.rowCenter}><Text style={s.chartTitle}>CHART</Text><StatusPill status={marketStatus?.state ?? "checking"} label={quote?.delayed ? "DELAYED" : marketStatus?.state === "connected" ? "LIVE FEED" : undefined} /></View><Text style={s.chartMeta}>{chart.length ? \`\${chart.length} bars\` : "—"}</Text></View>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.timeframeRail}>
+          {TIMEFRAMES.map((item) => <Pressable key={item} onPress={() => setTimeframe(item)} style={[s.timeframe, timeframe === item && s.timeframeActive]}><Text style={[s.timeframeText, timeframe === item && s.timeframeTextActive]}>{item}</Text></Pressable>)}
+        </ScrollView>
+        <View style={s.chartArea}>
+          <View style={[s.gridLine, { top: "25%" }]} /><View style={[s.gridLine, { top: "50%" }]} /><View style={[s.gridLine, { top: "75%" }]} />
+          {chart.length ? <View style={s.candlesRow}>{chart.map((c, i) => <CandleStick key={\`\${c.time}-\${i}\`} candle={c} min={bounds.min} max={bounds.max} />)}</View> :
+            <View style={s.chartEmpty}><Text style={s.chartEmptyTitle}>No chart data</Text><Text style={s.chartEmptyText}>Historical prices will appear when the market feed is available.</Text></View>}
+        </View>
+        <View style={s.chartFooter}><Text style={s.chartMeta}>{chart[0] ? dateLabel(chart[0].time) : "—"}</Text><Text style={s.chartMeta}>{chart[chart.length - 1] ? clock(chart[chart.length - 1].time) : "—"}</Text></View>
+      </Panel>
+      <View style={s.quoteGrid}>
+        <Panel style={s.quoteCard}><Eyebrow>BID</Eyebrow><Text style={[s.quoteValue, { color: C.red }]}>{price(quote?.bid, instrument?.pricePrecision)}</Text></Panel>
+        <Panel style={s.quoteCard}><Eyebrow>ASK</Eyebrow><Text style={[s.quoteValue, { color: C.lime }]}>{price(quote?.ask, instrument?.pricePrecision)}</Text></Panel>
+        <Panel style={s.quoteCard}><Eyebrow>SPREAD</Eyebrow><Text style={s.quoteValue}>{quote?.spread === undefined && (quote?.ask === undefined || quote?.bid === undefined) ? "—" : price(quote?.spread ?? (quote!.ask! - quote!.bid!), instrument?.pricePrecision)}</Text></Panel>
       </View>
-
-      <View style={styles.chartCard}>
-        <View style={styles.chartTopRow}>
-          <View style={styles.chartTitleGroup}>
-            <Text style={styles.chartTitle}>PRICE ACTION</Text>
-            <View style={styles.liveDot} />
-            <Text style={styles.chartLiveText}>{connection === "connected" ? "FEED CONNECTED" : "FEED OFFLINE"}</Text>
-          </View>
-          <Text style={styles.chartMenu}>•••</Text>
-        </View>
-        <View style={styles.timeframeRow}>
-          {TIMEFRAMES.map((item) => (
-            <Pressable key={item} onPress={() => setTimeframe(item)} style={[styles.timeframe, timeframe === item && styles.timeframeActive]}>
-              <Text style={[styles.timeframeText, timeframe === item && styles.timeframeTextActive]}>{item}</Text>
-            </Pressable>
-          ))}
-        </View>
-        <View style={styles.chartArea}>
-          <View style={styles.gridLineOne} />
-          <View style={styles.gridLineTwo} />
-          <View style={styles.gridLineThree} />
-          {loadingChart ? (
-            <View style={styles.chartMessage}>
-              <ActivityIndicator color={LIME} />
-              <Text style={styles.chartMessageText}>Loading market history…</Text>
-            </View>
-          ) : chartCandles.length ? (
-            <View style={styles.candlesRow}>
-              {chartCandles.map((candle, index) => (
-                <CandleStick key={`${candle.time}-${index}`} candle={candle} min={chartRange.min} max={chartRange.max} />
-              ))}
-            </View>
-          ) : (
-            <View style={styles.chartMessage}>
-              <View style={styles.chartIcon}><Text style={styles.chartIconText}>⌁</Text></View>
-              <Text style={styles.chartMessageTitle}>Chart data unavailable</Text>
-              <Text style={styles.chartMessageText}>Connect a configured market-data provider to load real candles.</Text>
-              <Pressable onPress={() => { void loadHistory(); void loadMarket(); }} style={styles.retryButton}>
-                <Text style={styles.retryText}>RETRY CONNECTION</Text>
-              </Pressable>
-            </View>
-          )}
-          <View style={styles.axisLabels}>
-            <Text style={styles.axisText}>HIGH</Text>
-            <Text style={styles.axisText}>MID</Text>
-            <Text style={styles.axisText}>LOW</Text>
-          </View>
-        </View>
-        <View style={styles.chartFooter}>
-          <Text style={styles.chartFooterText}>{chartCandles.length ? `${chartCandles.length} candles loaded` : "No historical candles"}</Text>
-          <Text style={styles.chartFooterText}>{lastUpdated ? `Updated ${lastUpdated}` : "Awaiting provider"}</Text>
-        </View>
-      </View>
-
-      <View style={styles.quoteStrip}>
-        <View style={styles.quoteCell}>
-          <Text style={styles.quoteLabel}>BID PRICE</Text>
-          <Text style={styles.bidValue}>{formatPrice(quote?.bid)}</Text>
-        </View>
-        <View style={styles.quoteDivider} />
-        <View style={styles.quoteCell}>
-          <Text style={styles.quoteLabel}>ASK PRICE</Text>
-          <Text style={styles.askValue}>{formatPrice(quote?.ask)}</Text>
-        </View>
-        <View style={styles.quoteDivider} />
-        <View style={styles.quoteCell}>
-          <Text style={styles.quoteLabel}>SPREAD</Text>
-          <Text style={styles.quoteValue}>{quote?.bid !== undefined && quote?.ask !== undefined ? formatPrice(quote.ask - quote.bid) : "—"}</Text>
-        </View>
-      </View>
-
-      <View style={styles.sectionHeading}>
-        <Text style={styles.sectionTitle}>EXECUTION PANEL</Text>
-        <Text style={styles.sectionHint}>BROKER NOT CONNECTED</Text>
-      </View>
-      <View style={styles.executionCard}>
-        <View style={styles.executionInfo}>
-          <Text style={styles.executionLabel}>ORDER SIZE</Text>
-          <Text style={styles.executionValue}>— lots</Text>
-        </View>
-        <View style={styles.executionInfo}>
-          <Text style={styles.executionLabel}>RISK CONTROL</Text>
-          <Text style={styles.executionValue}>Not configured</Text>
-        </View>
-        <View style={styles.executionButtons}>
-          <View style={[styles.tradeButton, styles.tradeButtonDisabled]}>
-            <Text style={styles.tradeButtonText}>SELL</Text>
-          </View>
-          <View style={[styles.tradeButton, styles.tradeButtonDisabled]}>
-            <Text style={styles.tradeButtonText}>BUY</Text>
-          </View>
-        </View>
-        <Text style={styles.executionNotice}>Order placement will be enabled after secure broker integration.</Text>
-      </View>
+      <SectionTitle title="LATEST SIGNALS" right={selectedSignals.length ? \`\${selectedSignals.length} results\` : "—"} />
+      {selectedSignals.length ? selectedSignals.slice(0, 2).map((item) => <SignalRow key={item.id} item={item} />) : <Panel><Text style={s.smallMuted}>No signal available for {symbol}.</Text></Panel>}
+      <SectionTitle title="NEXT ECONOMIC EVENTS" right="CALENDAR" />
+      {events.slice(0, 2).map((event) => <EventRow key={event.id} event={event} />)}
+      {!events.length ? <Panel><Text style={s.smallMuted}>No calendar events returned.</Text></Panel> : null}
     </>
   );
 
-  return (
-    <View style={styles.screen}>
-      <StatusBar barStyle="light-content" backgroundColor="#080B09" />
-      <View style={styles.topBar}>
-        <View style={styles.brandRow}>
-          <View style={styles.brandMark}><Text style={styles.brandMarkText}>V</Text></View>
-          <View>
-            <Text style={styles.brandName}>VEYTRIX</Text>
-            <Text style={styles.brandTagline}>INTELLIGENCE TERMINAL</Text>
-          </View>
-        </View>
-        <View style={styles.topActions}>
-          <View style={styles.connectionPill}>
-            <View style={[styles.connectionDot, connection === "connected" && styles.connectionDotOn]} />
-            <Text style={styles.connectionText}>{connection === "connected" ? "ONLINE" : connection === "checking" ? "CHECKING" : "OFFLINE"}</Text>
-          </View>
-          <View style={styles.avatar}><Text style={styles.avatarText}>LT</Text></View>
-        </View>
+  const renderMarkets = () => (
+    <>
+      <PageHeading title="Markets" subtitle="Live instruments" status={marketStatus} />
+      {instruments.length ? instruments.map((item) => {
+        const q = quotes.find((entry) => entry.instrument === item.symbol);
+        return <Pressable key={item.symbol} onPress={() => { setSymbol(item.symbol); setTab("Terminal"); }}><Panel style={s.marketRow}><View style={{ flex: 1 }}><Text style={s.marketSymbol}>{item.symbol}</Text><Text style={s.marketName}>{item.displayName}</Text></View><View style={{ alignItems: "flex-end" }}><Text style={s.marketPrice}>{price(q?.last, item.pricePrecision)}</Text><Text style={[s.marketChange, { color: (q?.change ?? 0) >= 0 ? C.lime : C.red }]}>{q?.changePercent === undefined ? "—" : \`\${q.changePercent >= 0 ? "+" : ""}\${q.changePercent.toFixed(2)}%\`}</Text></View></Panel></Pressable>;
+      }) : <Empty title="No instruments" detail={errors.market ?? "Connect a supported market-data provider to see available symbols."} action="REFRESH" onAction={() => void refresh()} />}
+    </>
+  );
+
+  const renderAnalysis = () => (
+    <>
+      <PageHeading title="Analysis" subtitle={\`Technical signals · \${symbol}\`} status={signalStatus} />
+      <View style={s.selectorRail}>{instruments.slice(0, 6).map((item) => <Pressable key={item.symbol} onPress={() => setSymbol(item.symbol)} style={[s.symbolChip, symbol === item.symbol && s.symbolChipActive]}><Text style={[s.symbolChipText, symbol === item.symbol && s.symbolChipTextActive]}>{item.symbol}</Text></Pressable>)}</View>
+      {selectedSignals.length ? selectedSignals.map((item) => <SignalRow key={item.id} item={item} expanded />) : <Empty title="No analysis available" detail={errors.signals ?? "The signal engine has not returned a setup for this instrument."} action="REFRESH" onAction={() => void refresh()} />}
+    </>
+  );
+
+  const renderFundamentals = () => {
+    const sorted = [...events].sort((a, b) => new Date(a.time).getTime() - new Date(b.time).getTime());
+    return <>
+      <PageHeading title="Fundamentals" subtitle="Economic calendar" status={fundStatus} />
+      <View style={s.fundSummary}>
+        <Panel style={s.fundStat}><Text style={s.fundNumber}>{events.filter((e) => e.impact === "high").length}</Text><Eyebrow>HIGH IMPACT</Eyebrow></Panel>
+        <Panel style={s.fundStat}><Text style={s.fundNumber}>{events.filter((e) => e.currency === "USD").length}</Text><Eyebrow>USD EVENTS</Eyebrow></Panel>
+        <Panel style={s.fundStat}><Text style={s.fundNumber}>{events.length}</Text><Eyebrow>ALL EVENTS</Eyebrow></Panel>
       </View>
+      {sorted.length ? sorted.map((event) => <EventRow key={event.id} event={event} expanded />) : <Empty title="Calendar unavailable" detail={errors.fundamentals ?? fundStatus?.message ?? "Economic events will appear when the calendar provider is connected."} action="REFRESH" onAction={() => void refresh()} />}
+      <SectionTitle title="CURRENCY BIAS" />
+      {sorted.filter((event) => event.currencyBias && event.currencyBias !== "pending").slice(0, 6).map((event) => <Panel key={\`bias-\${event.id}\`} style={s.biasRow}><View style={{ flex: 1 }}><Text style={s.marketSymbol}>{event.currency}</Text><Text style={s.marketName} numberOfLines={1}>{event.event}</Text></View><Text style={[s.biasText, { color: directionColor(event.currencyBias) }]}>{event.currencyBias.toUpperCase()}</Text></Panel>)}
+    </>;
+  };
 
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        {activeTab === "Terminal" ? renderTerminal() : (
-          <View style={styles.comingSoon}>
-            <Text style={styles.comingSoonEyebrow}>VEYTRIX WORKSPACE</Text>
-            <Text style={styles.comingSoonTitle}>{activeTab}</Text>
-            <Text style={styles.comingSoonBody}>This workspace is part of the mobile build roadmap. The trading terminal is the first screen being brought online.</Text>
-            <Pressable onPress={() => setActiveTab("Terminal")} style={styles.returnButton}>
-              <Text style={styles.returnButtonText}>RETURN TO TERMINAL</Text>
-            </Pressable>
-          </View>
-        )}
-        <Text style={styles.disclaimer}>Market data availability depends on your configured provider. Nothing here places a live trade.</Text>
+  const renderSignals = () => <>
+    <PageHeading title="Signal Room" subtitle="Setups and directional bias" status={signalStatus} />
+    {signals.length ? signals.map((item) => <SignalRow key={item.id} item={item} expanded />) : <Empty title="No active signals" detail={errors.signals ?? signalStatus?.message ?? "Signals will appear when the analysis engine returns results."} action="REFRESH" onAction={() => void refresh()} />}
+  </>;
+
+  return (
+    <View style={s.screen}>
+      <StatusBar barStyle="light-content" backgroundColor={C.bg} />
+      <View style={s.topBar}>
+        <View style={s.brandRow}><View style={s.brandMark}><Text style={s.brandMarkText}>V</Text></View><View><Text style={s.brandName}>VEYTRIX</Text><Text style={s.brandSub}>MARKET TERMINAL</Text></View></View>
+        <View style={s.topRight}><StatusPill status={marketStatus?.state ?? "checking"} /><Pressable onPress={() => void refresh()} style={s.refreshButton}><Text style={s.refreshText}>↻</Text></Pressable></View>
+      </View>
+      <ScrollView contentContainerStyle={s.content} showsVerticalScrollIndicator={false} refreshControl={<RefreshControl refreshing={loading} onRefresh={() => void refresh()} tintColor={C.lime} />}>
+        {tab === "Terminal" ? renderTerminal() : tab === "Markets" ? renderMarkets() : tab === "Analysis" ? renderAnalysis() : tab === "Fundamentals" ? renderFundamentals() : renderSignals()}
+        <Text style={s.footer}>Prices and events are supplied by connected providers.</Text>
       </ScrollView>
-
-      <View style={styles.bottomNav}>
-        {([
-          ["Terminal", "⌁"],
-          ["Markets", "◫"],
-          ["AI Lab", "✳"],
-          ["Signals", "⌁"],
-          ["Portfolio", "▤"],
-        ] as [Tab, string][]).map(([tab, glyph]) => (
-          <Pressable key={tab} onPress={() => setActiveTab(tab)} style={styles.navItem}>
-            <Text style={[styles.navGlyph, activeTab === tab && styles.navGlyphActive]}>{glyph}</Text>
-            <Text style={[styles.navLabel, activeTab === tab && styles.navLabelActive]}>{tab}</Text>
-            {activeTab === tab && <View style={styles.navIndicator} />}
-          </Pressable>
-        ))}
+      <View style={s.bottomNav}>
+        {(["Terminal", "Markets", "Analysis", "Fundamentals", "Signals"] as Tab[]).map((item) => <Pressable key={item} onPress={() => setTab(item)} style={s.navItem}><Text style={[s.navLabel, tab === item && s.navLabelActive]}>{item}</Text>{tab === item ? <View style={s.navIndicator} /> : null}</Pressable>)}
       </View>
     </View>
   );
 }
 
-const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: "#080B09" },
-  topBar: { paddingTop: 48, paddingHorizontal: 20, paddingBottom: 17, flexDirection: "row", alignItems: "center", justifyContent: "space-between", borderBottomWidth: 1, borderBottomColor: "#1B241E" },
+function PageHeading({ title, subtitle, status }: { title: string; subtitle: string; status: ProviderStatus | null }) {
+  return <View style={s.pageHeading}><View style={{ flex: 1 }}><Text style={s.pageTitle}>{title}</Text><Text style={s.pageSubtitle}>{subtitle}</Text></View>{status ? <StatusPill status={status.state} /> : null}</View>;
+}
+function SignalRow({ item, expanded }: { item: Signal; expanded?: boolean }) {
+  const color = directionColor(item.direction);
+  return <Panel style={s.signalCard}><View style={s.signalTop}><View style={{ flex: 1 }}><Text style={s.signalSymbol}>{item.instrument} <Text style={s.signalTimeframe}>{item.timeframe}</Text></Text><Text style={s.signalTitle}>{item.title}</Text></View><View style={[s.directionPill, { borderColor: color + "66" }]}><Text style={[s.directionText, { color }]}>{item.direction.toUpperCase()}</Text></View></View><View style={s.signalMeta}><Text style={s.signalMetaText}>{item.type.toUpperCase()}</Text><Text style={s.signalMetaText}>{Math.round(item.confidence)}% confidence</Text><Text style={s.signalMetaText}>{clock(item.createdAt)}</Text></View>{expanded ? <><Text style={s.signalSummary}>{item.summary}</Text>{item.entry !== undefined || item.stopLoss !== undefined || item.takeProfit !== undefined ? <View style={s.levels}><Level label="ENTRY" value={item.entry} /><Level label="STOP" value={item.stopLoss} /><Level label="TARGET" value={item.takeProfit} /></View> : null}</> : null}</Panel>;
+}
+function Level({ label, value }: { label: string; value?: number }) {
+  return <View style={s.level}><Eyebrow>{label}</Eyebrow><Text style={s.levelValue}>{price(value)}</Text></View>;
+}
+function EventRow({ event, expanded }: { event: Event; expanded?: boolean }) {
+  const impactColor = event.impact === "high" ? C.red : event.impact === "medium" ? C.amber : C.muted;
+  return <Panel style={s.eventCard}><View style={s.eventTop}><View style={{ flex: 1 }}><View style={s.eventMeta}><Text style={s.eventCurrency}>{event.currency}</Text><Text style={[s.impact, { color: impactColor }]}>{event.impact.toUpperCase()}</Text><Text style={s.eventTime}>{dateLabel(event.time)} · {clock(event.time)}</Text></View><Text style={s.eventName}>{event.event}</Text></View><Text style={[s.eventBias, { color: directionColor(event.currencyBias) }]}>{event.currencyBias === "pending" ? "—" : event.currencyBias.toUpperCase()}</Text></View><View style={s.eventNumbers}><EventNumber label="ACTUAL" value={event.actual} unit={event.unit} /><EventNumber label="FORECAST" value={event.estimate} unit={event.unit} /><EventNumber label="PREVIOUS" value={event.previous} unit={event.unit} /></View>{expanded && event.affectedPairs?.length ? <Text style={s.affectedPairs}>AFFECTED  {event.affectedPairs.slice(0, 5).map((pair) => \`\${pair.symbol} \${pair.bias}\`).join("   ·   ")}</Text> : null}</Panel>;
+}
+function EventNumber({ label, value, unit }: { label: string; value: number | null; unit?: string }) {
+  return <View style={s.eventNumber}><Eyebrow>{label}</Eyebrow><Text style={s.eventNumberValue}>{value === null ? "—" : \`\${value}\${unit ? \` \${unit}\` : ""}\`}</Text></View>;
+}
+
+const s = StyleSheet.create({
+  screen: { flex: 1, backgroundColor: C.bg },
+  topBar: { paddingTop: 48, paddingHorizontal: 18, paddingBottom: 14, flexDirection: "row", alignItems: "center", justifyContent: "space-between", borderBottomWidth: 1, borderBottomColor: C.line },
   brandRow: { flexDirection: "row", alignItems: "center", gap: 10 },
-  brandMark: { width: 34, height: 34, borderRadius: 11, backgroundColor: LIME, alignItems: "center", justifyContent: "center" },
-  brandMarkText: { color: "#10160E", fontSize: 21, fontWeight: "900" },
-  brandName: { color: "#F4F7F3", fontSize: 15, fontWeight: "900", letterSpacing: 2.2 },
-  brandTagline: { color: "#77847A", fontSize: 8, letterSpacing: 1.25, marginTop: 2 },
-  topActions: { flexDirection: "row", alignItems: "center", gap: 10 },
-  connectionPill: { flexDirection: "row", alignItems: "center", gap: 6, borderWidth: 1, borderColor: "#26342A", borderRadius: 20, paddingHorizontal: 9, paddingVertical: 6 },
-  connectionDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: "#E3A64C" },
-  connectionDotOn: { backgroundColor: LIME },
-  connectionText: { color: "#AAB5AC", fontSize: 8, fontWeight: "800", letterSpacing: 1 },
-  avatar: { width: 31, height: 31, borderRadius: 16, borderWidth: 1, borderColor: "#354238", alignItems: "center", justifyContent: "center" },
-  avatarText: { color: LIME, fontSize: 10, fontWeight: "800" },
-  scrollContent: { paddingHorizontal: 17, paddingTop: 20, paddingBottom: 25 },
-  instrumentHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 17 },
-  eyebrow: { color: MUTED, fontSize: 9, fontWeight: "700", letterSpacing: 1.4, marginBottom: 5 },
-  instrumentNameRow: { flexDirection: "row", alignItems: "center", gap: 8 },
-  instrumentName: { color: "#F2F5F1", fontSize: 25, fontWeight: "800", letterSpacing: 0.5 },
-  chevron: { color: LIME, fontSize: 20, marginTop: -5 },
-  instrumentSub: { color: "#829087", fontSize: 10, marginTop: 3 },
+  brandMark: { width: 34, height: 34, borderRadius: 10, backgroundColor: C.lime, alignItems: "center", justifyContent: "center" },
+  brandMarkText: { color: "#10160E", fontSize: 22, fontWeight: "900" },
+  brandName: { color: C.text, fontSize: 15, fontWeight: "900", letterSpacing: 2 },
+  brandSub: { color: C.muted, fontSize: 8, letterSpacing: 1.4, marginTop: 2 },
+  topRight: { flexDirection: "row", alignItems: "center", gap: 9 },
+  statusPill: { flexDirection: "row", alignItems: "center", gap: 6, borderWidth: 1, borderColor: C.line, borderRadius: 20, paddingHorizontal: 9, paddingVertical: 6 },
+  dot: { width: 6, height: 6, borderRadius: 3 },
+  statusText: { color: "#B7C1B9", fontSize: 8, fontWeight: "800", letterSpacing: 0.8 },
+  refreshButton: { width: 30, height: 30, borderRadius: 9, backgroundColor: C.panel, alignItems: "center", justifyContent: "center" },
+  refreshText: { color: C.lime, fontSize: 21 },
+  content: { paddingHorizontal: 16, paddingTop: 17, paddingBottom: 26 },
+  panel: { backgroundColor: C.panel, borderWidth: 1, borderColor: C.line, borderRadius: 13, padding: 13, marginBottom: 10 },
+  eyebrow: { color: C.muted, fontSize: 8, fontWeight: "800", letterSpacing: 1, marginBottom: 5 },
+  sectionHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 12, marginBottom: 9 },
+  sectionTitle: { color: C.text, fontSize: 10, fontWeight: "900", letterSpacing: 1.1 },
+  sectionRight: { color: C.muted, fontSize: 8, letterSpacing: 0.7 },
+  instrumentHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 15 },
+  instrumentName: { color: C.text, fontSize: 27, fontWeight: "800", letterSpacing: 0.3 },
+  instrumentSub: { color: C.muted, fontSize: 10, marginTop: 3 },
   priceBlock: { alignItems: "flex-end" },
-  lastPrice: { color: "#F3F6F2", fontSize: 22, fontWeight: "700", fontVariant: ["tabular-nums"] },
-  priceCaption: { color: MUTED, fontSize: 8, letterSpacing: 1, marginTop: 4 },
-  symbolPicker: { flexDirection: "row", gap: 7, marginBottom: 16 },
-  symbolChip: { borderRadius: 7, borderWidth: 1, borderColor: "#202A23", paddingHorizontal: 10, paddingVertical: 8, backgroundColor: "#0D120F" },
-  symbolChipActive: { borderColor: "#789C4C", backgroundColor: "#172316" },
-  symbolChipText: { color: "#87938A", fontSize: 9, fontWeight: "700" },
-  symbolChipTextActive: { color: LIME },
-  chartCard: { borderWidth: 1, borderColor: "#202A23", borderRadius: 14, backgroundColor: "#0D120F", padding: 13 },
-  chartTopRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  chartTitleGroup: { flexDirection: "row", alignItems: "center", gap: 7 },
-  chartTitle: { color: "#DCE3DC", fontSize: 9, fontWeight: "800", letterSpacing: 1.1 },
-  liveDot: { width: 5, height: 5, borderRadius: 3, backgroundColor: LIME },
-  chartLiveText: { color: MUTED, fontSize: 7, letterSpacing: 0.8 },
-  chartMenu: { color: "#849087", fontSize: 16, letterSpacing: 2 },
-  timeframeRow: { flexDirection: "row", justifyContent: "space-between", marginTop: 14, marginBottom: 10 },
-  timeframe: { paddingVertical: 6, paddingHorizontal: 7, borderRadius: 5 },
+  lastPrice: { color: C.text, fontSize: 22, fontWeight: "700", fontVariant: ["tabular-nums"] },
+  changeText: { fontSize: 10, fontWeight: "800", marginTop: 4 },
+  symbolRail: { marginBottom: 12, flexGrow: 0 },
+  symbolRailContent: { gap: 7, paddingRight: 6 },
+  selectorRail: { flexDirection: "row", flexWrap: "wrap", gap: 7, marginBottom: 12 },
+  symbolChip: { borderWidth: 1, borderColor: C.line, backgroundColor: C.panel, borderRadius: 7, paddingHorizontal: 11, paddingVertical: 8 },
+  symbolChipActive: { borderColor: "#719A49", backgroundColor: "#1A2918" },
+  symbolChipText: { color: C.muted, fontSize: 9, fontWeight: "800" },
+  symbolChipTextActive: { color: C.lime },
+  chartHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  rowCenter: { flexDirection: "row", alignItems: "center", gap: 9 },
+  chartTitle: { color: C.text, fontSize: 9, fontWeight: "900", letterSpacing: 1 },
+  chartMeta: { color: C.muted, fontSize: 8 },
+  timeframeRail: { flexDirection: "row", justifyContent: "space-between", gap: 7, paddingVertical: 13 },
+  timeframe: { paddingVertical: 6, paddingHorizontal: 8, borderRadius: 5 },
   timeframeActive: { backgroundColor: "#24351D" },
-  timeframeText: { color: "#77847A", fontSize: 9, fontWeight: "700" },
-  timeframeTextActive: { color: LIME },
-  chartArea: { height: 220, overflow: "hidden", backgroundColor: "#0A0F0C", borderRadius: 7, position: "relative" },
-  gridLineOne: { position: "absolute", left: 0, right: 0, top: "25%", height: 1, backgroundColor: "#1C2820" },
-  gridLineTwo: { position: "absolute", left: 0, right: 0, top: "50%", height: 1, backgroundColor: "#1C2820" },
-  gridLineThree: { position: "absolute", left: 0, right: 0, top: "75%", height: 1, backgroundColor: "#1C2820" },
-  candlesRow: { position: "absolute", left: 5, right: 32, top: 8, bottom: 8, flexDirection: "row", alignItems: "stretch", justifyContent: "space-around" },
-  candleSlot: { flex: 1, maxWidth: 9, position: "relative", height: "100%" },
+  timeframeText: { color: C.muted, fontSize: 9, fontWeight: "800" },
+  timeframeTextActive: { color: C.lime },
+  chartArea: { height: 218, backgroundColor: C.panel2, borderRadius: 8, overflow: "hidden", position: "relative" },
+  gridLine: { position: "absolute", left: 0, right: 0, height: 1, backgroundColor: "#1B2720" },
+  candlesRow: { position: "absolute", left: 5, right: 5, top: 8, bottom: 8, flexDirection: "row", alignItems: "stretch", justifyContent: "space-around" },
+  candleSlot: { flex: 1, maxWidth: 8, position: "relative", height: "100%" },
   wick: { position: "absolute", width: 1, left: "50%" },
   candleBody: { position: "absolute", width: 5, left: "50%", marginLeft: -2 },
-  chartMessage: { position: "absolute", left: 30, right: 48, top: 35, bottom: 25, alignItems: "center", justifyContent: "center" },
-  chartIcon: { width: 36, height: 36, borderRadius: 18, backgroundColor: "#17231A", alignItems: "center", justifyContent: "center", marginBottom: 10 },
-  chartIconText: { color: LIME, fontSize: 24 },
-  chartMessageTitle: { color: "#E1E8E1", fontSize: 12, fontWeight: "700", marginBottom: 5 },
-  chartMessageText: { color: "#839087", fontSize: 9, textAlign: "center", lineHeight: 15 },
-  retryButton: { marginTop: 12, paddingHorizontal: 12, paddingVertical: 8, borderWidth: 1, borderColor: "#526E3C", borderRadius: 6 },
-  retryText: { color: LIME, fontSize: 8, fontWeight: "800", letterSpacing: 0.8 },
-  axisLabels: { position: "absolute", right: 5, top: 9, bottom: 9, justifyContent: "space-between" },
-  axisText: { color: "#66736A", fontSize: 7 },
-  chartFooter: { flexDirection: "row", justifyContent: "space-between", marginTop: 10 },
-  chartFooterText: { color: "#758178", fontSize: 8 },
-  quoteStrip: { flexDirection: "row", alignItems: "center", borderWidth: 1, borderColor: "#202A23", borderRadius: 11, backgroundColor: "#0D120F", marginTop: 13, paddingVertical: 13 },
-  quoteCell: { flex: 1, alignItems: "center" },
-  quoteDivider: { width: 1, height: 27, backgroundColor: "#273129" },
-  quoteLabel: { color: "#79867D", fontSize: 8, letterSpacing: 0.8, marginBottom: 6 },
-  bidValue: { color: "#F07880", fontSize: 12, fontWeight: "700" },
-  askValue: { color: LIME, fontSize: 12, fontWeight: "700" },
-  quoteValue: { color: "#DDE4DD", fontSize: 12, fontWeight: "700" },
-  sectionHeading: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 21, marginBottom: 10 },
-  sectionTitle: { color: "#E3E9E3", fontSize: 9, fontWeight: "800", letterSpacing: 1.1 },
-  sectionHint: { color: "#B58B4E", fontSize: 7, fontWeight: "800", letterSpacing: 0.8 },
-  executionCard: { borderWidth: 1, borderColor: "#202A23", borderRadius: 12, backgroundColor: "#0D120F", padding: 13 },
-  executionInfo: { flexDirection: "row", justifyContent: "space-between", marginBottom: 10 },
-  executionLabel: { color: "#829087", fontSize: 9 },
-  executionValue: { color: "#C7D0C8", fontSize: 9, fontWeight: "700" },
-  executionButtons: { flexDirection: "row", gap: 9, marginTop: 3 },
-  tradeButton: { flex: 1, borderRadius: 7, alignItems: "center", paddingVertical: 12 },
-  tradeButtonDisabled: { backgroundColor: "#202820", borderWidth: 1, borderColor: "#303B32" },
-  tradeButtonText: { color: "#7D897F", fontSize: 10, fontWeight: "900", letterSpacing: 1.1 },
-  executionNotice: { color: "#78847B", fontSize: 8, textAlign: "center", marginTop: 10 },
-  bottomNav: { height: 67, borderTopWidth: 1, borderTopColor: "#202A23", backgroundColor: "#0A0F0C", flexDirection: "row", justifyContent: "space-around", alignItems: "center", paddingBottom: 5 },
-  navItem: { flex: 1, alignItems: "center", justifyContent: "center", height: 58, gap: 3 },
-  navGlyph: { color: "#6F7B72", fontSize: 17 },
-  navGlyphActive: { color: LIME },
-  navLabel: { color: "#77847A", fontSize: 8, fontWeight: "600" },
-  navLabelActive: { color: LIME, fontWeight: "800" },
-  navIndicator: { width: 13, height: 2, borderRadius: 2, backgroundColor: LIME, marginTop: 1 },
-  comingSoon: { minHeight: 390, justifyContent: "center", alignItems: "center", paddingHorizontal: 22 },
-  comingSoonEyebrow: { color: LIME, fontSize: 9, letterSpacing: 1.5, fontWeight: "800" },
-  comingSoonTitle: { color: "#F1F5F1", fontSize: 28, fontWeight: "800", marginTop: 10 },
-  comingSoonBody: { color: "#8A968D", fontSize: 12, lineHeight: 19, textAlign: "center", marginTop: 10 },
-  returnButton: { backgroundColor: LIME, borderRadius: 7, paddingHorizontal: 16, paddingVertical: 11, marginTop: 22 },
-  returnButtonText: { color: "#11170F", fontSize: 9, fontWeight: "900", letterSpacing: 0.8 },
-  disclaimer: { color: "#59655D", fontSize: 8, lineHeight: 13, textAlign: "center", marginTop: 17, marginBottom: 3 },
+  chartEmpty: { flex: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: 30 },
+  chartEmptyTitle: { color: C.text, fontSize: 12, fontWeight: "800", marginBottom: 6 },
+  chartEmptyText: { color: C.muted, fontSize: 9, textAlign: "center", lineHeight: 15 },
+  chartFooter: { flexDirection: "row", justifyContent: "space-between", marginTop: 9 },
+  quoteGrid: { flexDirection: "row", gap: 8, marginTop: 10 },
+  quoteCard: { flex: 1, padding: 10, marginBottom: 0 },
+  quoteValue: { color: C.text, fontSize: 12, fontWeight: "800", fontVariant: ["tabular-nums"] },
+  smallMuted: { color: C.muted, fontSize: 10 },
+  pageHeading: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 16 },
+  pageTitle: { color: C.text, fontSize: 25, fontWeight: "800" },
+  pageSubtitle: { color: C.muted, fontSize: 10, marginTop: 4 },
+  marketRow: { flexDirection: "row", alignItems: "center", marginBottom: 8 },
+  marketSymbol: { color: C.text, fontSize: 13, fontWeight: "800" },
+  marketName: { color: C.muted, fontSize: 9, marginTop: 3 },
+  marketPrice: { color: C.text, fontSize: 12, fontWeight: "700" },
+  marketChange: { fontSize: 9, fontWeight: "800", marginTop: 3 },
+  signalCard: { padding: 13 },
+  signalTop: { flexDirection: "row", alignItems: "flex-start", gap: 10 },
+  signalSymbol: { color: C.text, fontSize: 13, fontWeight: "900" },
+  signalTimeframe: { color: C.muted, fontSize: 9, fontWeight: "600" },
+  signalTitle: { color: "#D5DED6", fontSize: 10, marginTop: 5 },
+  directionPill: { borderWidth: 1, borderRadius: 6, paddingHorizontal: 8, paddingVertical: 5 },
+  directionText: { fontSize: 8, fontWeight: "900", letterSpacing: 0.7 },
+  signalMeta: { flexDirection: "row", gap: 12, marginTop: 11, paddingTop: 9, borderTopWidth: 1, borderTopColor: C.line },
+  signalMetaText: { color: C.muted, fontSize: 8 },
+  signalSummary: { color: "#AEB9B0", fontSize: 10, lineHeight: 15, marginTop: 10 },
+  levels: { flexDirection: "row", justifyContent: "space-between", marginTop: 12, paddingTop: 10, borderTopWidth: 1, borderTopColor: C.line },
+  level: { flex: 1 },
+  levelValue: { color: C.text, fontSize: 10, fontWeight: "700" },
+  fundSummary: { flexDirection: "row", gap: 8, marginBottom: 8 },
+  fundStat: { flex: 1, alignItems: "center", paddingVertical: 12, marginBottom: 0 },
+  fundNumber: { color: C.lime, fontSize: 20, fontWeight: "800", marginBottom: 4 },
+  eventCard: { padding: 12 },
+  eventTop: { flexDirection: "row", alignItems: "center", gap: 8 },
+  eventMeta: { flexDirection: "row", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 5 },
+  eventCurrency: { color: C.lime, fontSize: 9, fontWeight: "900" },
+  impact: { fontSize: 8, fontWeight: "900" },
+  eventTime: { color: C.muted, fontSize: 8 },
+  eventName: { color: C.text, fontSize: 11, fontWeight: "700" },
+  eventBias: { fontSize: 8, fontWeight: "900" },
+  eventNumbers: { flexDirection: "row", justifyContent: "space-between", marginTop: 12, paddingTop: 10, borderTopWidth: 1, borderTopColor: C.line },
+  eventNumber: { flex: 1 },
+  eventNumberValue: { color: "#DCE4DC", fontSize: 10, fontWeight: "700" },
+  affectedPairs: { color: C.muted, fontSize: 8, marginTop: 10, lineHeight: 14 },
+  biasRow: { flexDirection: "row", alignItems: "center" },
+  biasText: { fontSize: 9, fontWeight: "900" },
+  empty: { minHeight: 235, alignItems: "center", justifyContent: "center", paddingHorizontal: 25, backgroundColor: C.panel, borderRadius: 13, borderWidth: 1, borderColor: C.line },
+  emptyMark: { width: 34, height: 34, borderRadius: 17, backgroundColor: "#1B2918", alignItems: "center", justifyContent: "center", marginBottom: 10 },
+  emptyMarkText: { color: C.lime, fontSize: 20, fontWeight: "700" },
+  emptyTitle: { color: C.text, fontSize: 12, fontWeight: "800" },
+  emptyDetail: { color: C.muted, fontSize: 9, lineHeight: 15, textAlign: "center", marginTop: 6 },
+  outlineButton: { borderWidth: 1, borderColor: "#526E3C", borderRadius: 6, paddingHorizontal: 13, paddingVertical: 8, marginTop: 13 },
+  outlineText: { color: C.lime, fontSize: 8, fontWeight: "900", letterSpacing: 0.7 },
+  footer: { color: C.faint, fontSize: 8, textAlign: "center", marginTop: 14, marginBottom: 3 },
+  bottomNav: { height: 65, borderTopWidth: 1, borderTopColor: C.line, backgroundColor: "#0A0F0C", flexDirection: "row", alignItems: "center", justifyContent: "space-around", paddingHorizontal: 4 },
+  navItem: { flex: 1, height: 54, alignItems: "center", justifyContent: "center", gap: 6 },
+  navLabel: { color: "#77847A", fontSize: 8, fontWeight: "700" },
+  navLabelActive: { color: C.lime, fontWeight: "900" },
+  navIndicator: { width: 15, height: 2, borderRadius: 2, backgroundColor: C.lime },
 });
