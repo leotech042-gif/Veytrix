@@ -93,6 +93,7 @@ export function TradingChart({
   compact?: boolean;
 }) {
   const panelRef = useRef<HTMLElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
   const widgetRef = useRef<HTMLDivElement>(null);
   const [selectedInstrument, setSelectedInstrument] =
     useState(initialInstrument);
@@ -159,15 +160,12 @@ export function TradingChart({
       ? (widgetLoadResult.error ?? null)
       : null;
   useEffect(() => {
+    const container = containerRef.current;
     const widget = widgetRef.current;
-    if (!widget || !symbol) return;
+    if (!container || !widget || !symbol) return;
 
     let active = true;
-    const embedContainer = document.createElement("div");
-    embedContainer.className = "tradingview-widget-generation";
-    embedContainer.style.width = "100%";
-    embedContainer.style.height = "100%";
-    widget.replaceChildren(embedContainer);
+    widget.replaceChildren();
 
     const studies = [
       ...(showSma ? ["MASimple@tv-basicstudies"] : []),
@@ -218,11 +216,12 @@ export function TradingChart({
         });
       }
     };
-    embedContainer.appendChild(script);
+    container.appendChild(script);
 
     return () => {
       active = false;
-      embedContainer.remove();
+      script.remove();
+      widget.replaceChildren();
     };
   }, [
     chartBackground,
@@ -362,9 +361,16 @@ export function TradingChart({
           aria-label="Veytrix interactive chart"
         >
           <div
-            className="tradingview-widget-container__widget"
-            ref={widgetRef}
-          />
+            className="tradingview-widget-container"
+            ref={containerRef}
+            style={{ width: "100%", height: "100%" }}
+          >
+            <div
+              className="tradingview-widget-container__widget"
+              ref={widgetRef}
+              style={{ width: "100%", height: "100%" }}
+            />
+          </div>
         </div>
         {(loading || error || !symbol) && (
           <div className="chart-overlay" role={error ? "alert" : "status"}>
