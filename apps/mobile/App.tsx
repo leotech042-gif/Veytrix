@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
+  Linking,
   Pressable,
   Platform,
   RefreshControl,
@@ -24,6 +25,7 @@ type Quote = { instrument: string; asOf: string; bid?: number; ask?: number; las
 type Candle = { time: string; open: number; high: number; low: number; close: number; volume?: number };
 type Instrument = { symbol: string; displayName: string; category: string; pricePrecision?: number };
 type Event = { id: string; time: string; country: string; currency: string; event: string; impact: "high" | "medium" | "low" | "unknown"; actual: number | null; estimate: number | null; previous: number | null; unit?: string; surprise?: number | null; volatility?: string; analysis?: string; currencyBias: string; affectedPairs: { symbol: string; bias: string }[] };
+type NewsItem = { id: string; headline: string; summary: string; source: string; url: string; publishedAt: string; category: string; related: string[] };
 type FundamentalCategory = "ALL" | "JOBS" | "INFLATION" | "RATES" | "GDP" | "CENTRAL BANKS";
 const FUNDAMENTAL_CATEGORIES: FundamentalCategory[] = ["ALL", "JOBS", "INFLATION", "RATES", "GDP", "CENTRAL BANKS"];
 function fundamentalCategory(name: string): FundamentalCategory | "OTHER" {
@@ -95,6 +97,7 @@ export default function App() {
   const [instruments, setInstruments] = useState<Instrument[]>([]);
   const [candles, setCandles] = useState<Candle[]>([]);
   const [events, setEvents] = useState<Event[]>([]);
+  const [news, setNews] = useState<NewsItem[]>([]);
   const [signals, setSignals] = useState<Signal[]>([]);
   const [marketStatus, setMarketStatus] = useState<ProviderStatus | null>(null);
   const [fundStatus, setFundStatus] = useState<ProviderStatus | null>(null);
@@ -118,16 +121,18 @@ export default function App() {
       request<Instrument[]>("/market-data/instruments"),
       request<ProviderStatus>("/fundamentals/status"),
       request<Event[]>("/fundamentals/calendar"),
+      request<NewsItem[]>("/fundamentals/news"),
       request<ProviderStatus>("/signals/status"),
       request<Signal[]>("/signals"),
     ]);
     const nextErrors: Record<string, string> = {};
-    const [ms, qs, ins, fs, es, ss, sigs] = results;
+    const [ms, qs, ins, fs, es, ns, ss, sigs] = results;
     if (ms.status === "fulfilled") setMarketStatus(ms.value); else nextErrors.market = "Market data service unavailable";
     if (qs.status === "fulfilled") setQuotes(qs.value); else { setQuotes([]); nextErrors.quotes = "Quotes unavailable"; }
     if (ins.status === "fulfilled") setInstruments(ins.value); else setInstruments([]);
     if (fs.status === "fulfilled") setFundStatus(fs.value); else nextErrors.fundamentals = "Economic calendar unavailable";
     if (es.status === "fulfilled") setEvents(es.value); else setEvents([]);
+    if (ns.status === "fulfilled") setNews(ns.value); else { setNews([]); nextErrors.news = "Market news unavailable"; }
     if (ss.status === "fulfilled") setSignalStatus(ss.value); else nextErrors.signals = "Signal service unavailable";
     if (sigs.status === "fulfilled") setSignals(sigs.value); else setSignals([]);
     setErrors(nextErrors);
@@ -241,6 +246,8 @@ export default function App() {
         const bias = score > 0.15 ? "bullish" : score < -0.15 ? "bearish" : "neutral";
         return <Panel key={currency} style={s.biasRow}><View style={{ flex: 1 }}><Text style={s.marketSymbol}>{currency}</Text><Text style={s.marketName}>{data.releases} priced releases · impact-weighted</Text></View><Text style={[s.biasText, { color: directionColor(bias) }]}>{bias.toUpperCase()}</Text></Panel>;
       }) : <Text style={s.smallMuted}>Currency bias will appear after releases contain actual figures.</Text>}
+      <SectionTitle title="LATEST MARKET NEWS" right={news.length ? `${news.length} HEADLINES` : "—"} />
+      {news.length ? news.slice(0, 8).map((item) => <Pressable key={item.id} onPress={() => { if (item.url) void Linking.openURL(item.url); }}><Panel style={s.newsCard}><View style={s.newsMeta}><Text style={s.newsSource}>{item.source.toUpperCase()}</Text><Text style={s.eventTime}>{dateLabel(item.publishedAt)} · {clock(item.publishedAt)}</Text></View><Text style={s.newsHeadline}>{item.headline}</Text>{item.summary ? <Text style={s.newsSummary} numberOfLines={3}>{item.summary}</Text> : null}{item.related.length ? <Text style={s.newsRelated}>{item.related.slice(0, 4).join(" · ")}</Text> : null}</Panel></Pressable>) : <Text style={s.smallMuted}>{errors.news ?? "No market headlines returned by the news provider."}</Text>}
     </>;
   };
 
@@ -383,6 +390,12 @@ const s = StyleSheet.create({
   eventNumber: { flex: 1 },
   eventNumberValue: { color: "#DCE4DC", fontSize: 10, fontWeight: "700" },
   eventAnalysis: { color: "#B9C5BA", fontSize: 9, lineHeight: 15, marginTop: 10 },
+  newsCard: { padding: 13 },
+  newsMeta: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 8 },
+  newsSource: { color: C.lime, fontSize: 8, fontWeight: "900", letterSpacing: 0.7 },
+  newsHeadline: { color: C.text, fontSize: 11, fontWeight: "800", lineHeight: 16 },
+  newsSummary: { color: C.muted, fontSize: 9, lineHeight: 15, marginTop: 7 },
+  newsRelated: { color: C.blue, fontSize: 8, marginTop: 8 },
   eventVolatility: { color: C.amber, fontSize: 8, fontWeight: "800", marginTop: 8, letterSpacing: 0.5 },
   affectedPairs: { color: C.muted, fontSize: 8, marginTop: 10, lineHeight: 14 },
   biasRow: { flexDirection: "row", alignItems: "center" },

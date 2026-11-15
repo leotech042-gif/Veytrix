@@ -111,3 +111,13 @@ export interface TradingSignal {
   marketOpen?: boolean;
   leanScore?: number;
 }
+export interface FundamentalNewsItem {
+  id: string;
+  headline: string;
+  summary: string;
+  source: string;
+  url: string;
+  publishedAt: string;
+  category: string;
+  related: string[];
+}

@@ -27,9 +27,9 @@ The API CORS configuration includes the local Expo web origin.
 - Terminal: selected instrument, historical candles, bid/ask/spread, latest signals and upcoming events.
 - Markets: instruments and quotes returned by the configured market-data provider.
 - Analysis: technical signals returned by the existing Veytrix signal engine.
-- Fundamentals: economic calendar, release categories (jobs/NFP, inflation/CPI, rates, GDP and central-bank events), actual/forecast/previous values, release surprise, volatility, event analysis, affected pairs and event-based currency bias.
+- Fundamentals: economic calendar, release categories (jobs/NFP, inflation/CPI, rates, GDP and central-bank events), actual/forecast/previous values, release surprise, volatility, event analysis, affected pairs, event-based currency bias and the latest Finnhub market headlines.
 - Signal Room: returned setups and directional bias.
 
-The current API supplies the economic calendar through Finnhub. Separate live news headlines and a standalone macroeconomic time-series/central-bank research feed are not yet exposed by the backend, so the app does not fabricate those datasets. Currency bias shown here is calculated from returned event releases, not a standalone currency-strength index.
+The API supplies economic releases and general market headlines through Finnhub. News is displayed as provider headlines and summaries; the current provider does not return a reliable per-headline market-impact score. Currency bias shown here is calculated from returned event releases, not a standalone currency-strength index.
 
 The app does not generate sample prices, fabricate events, or invent signals. Missing provider data is shown as an honest empty state. Order execution remains disabled until secure broker authentication and execution are implemented.
