@@ -216,11 +216,15 @@ export function TradingChart({
 
     // TradingView expects the script to be a direct child of its outer
     // .tradingview-widget-container, alongside the inner widget mount point.
-    // Putting the script inside the inner mount point breaks its iframe lookup.
-    container.appendChild(script);
+    // Defer insertion one frame so React Strict Mode's development-only
+    // setup/cleanup check cannot detach the container before the script runs.
+    const frame = window.requestAnimationFrame(() => {
+      if (active) container.appendChild(script);
+    });
 
     return () => {
       active = false;
+      window.cancelAnimationFrame(frame);
       script.remove();
       widget.replaceChildren();
     };
