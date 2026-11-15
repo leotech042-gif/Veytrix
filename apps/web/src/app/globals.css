@@ -2258,3 +2258,26 @@ a:focus-visible {
   gap: 0.35rem;
   align-items: center;
 }
+
+/* Veytrix responsive professional terminal */
+.terminal-workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1.65fr) minmax(290px, 0.78fr);
+  gap: 1rem;
+  align-items: start;
+  margin: 1.25rem 0 1.5rem;
+}
+.terminal-workspace-chart,
+.terminal-workspace-watch { min-width: 0; }
+.terminal-workspace-chart .trading-chart-panel { height: 100%; }
+.terminal-workspace-watch > .panel,
+.terminal-workspace-watch .market-watch-panel { height: 100%; }
+.terminal-workspace-watch .market-table-wrap { max-height: 620px; overflow: auto; }
+.terminal-workspace-watch .market-cards { display: grid; }
+@media (max-width: 1120px) {
+  .terminal-workspace { grid-template-columns: minmax(0, 1fr); }
+  .terminal-workspace-watch .market-table-wrap { max-height: 420px; }
+}
+@media (max-width: 800px) {
+  .terminal-workspace { gap: .75rem; margin-top: .75rem; }
+}

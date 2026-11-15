@@ -122,10 +122,21 @@ export function SectionPage({
     return (
       <>
         <PageHeading
-          eyebrow="TRADING WORKSPACE"
+          eyebrow="PROFESSIONAL TRADING WORKSPACE"
           title="Trading terminal"
-          description="Review signal performance over time. Profit and loss will be measured in R-multiples from verified signal outcomes, not broker account currency."
+          description="Chart-led market workspace with instrument watchlist, technical tools and verified market data."
         />
+        <section className="terminal-workspace" aria-label="Trading terminal workspace">
+          <div className="terminal-workspace-chart">
+            <TradingChart
+              instruments={feed.instruments}
+              initialInstrument={symbol || "XAUUSD"}
+            />
+          </div>
+          <aside className="terminal-workspace-watch">
+            <MarketWatch feed={feed} favoritesOnly compact />
+          </aside>
+        </section>
         <TerminalPerformance />
       </>
     );

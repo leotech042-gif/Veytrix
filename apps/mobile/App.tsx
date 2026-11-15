@@ -11,14 +11,16 @@ import {
 } from "react-native";
 
 const API = (process.env.EXPO_PUBLIC_API_URL ?? "http://10.0.2.2:4000/api").replace(/\/$/, "");
-const C = {
+const DARK_C = {
   bg: "#080B09", panel: "#101612", panel2: "#0C110E", line: "#202B23",
   lime: "#B5FF55", text: "#F2F5F1", muted: "#829087", faint: "#59665D",
   red: "#F07880", amber: "#E5B15D", blue: "#82B9E8",
 };
+const LIGHT_C = { bg: "#F4F7F3", panel: "#FFFFFF", panel2: "#EDF2EC", line: "#DCE5DC", lime: "#4E861C", text: "#172018", muted: "#667366", faint: "#8A968A", red: "#C84952", amber: "#A66B16", blue: "#3B75A5" };
+let C = DARK_C;
 const TIMEFRAMES = ["M1", "M5", "M15", "M30", "H1", "H4", "D1", "W1"] as const;
 type Timeframe = (typeof TIMEFRAMES)[number];
-type Tab = "Terminal" | "Markets" | "Analysis" | "Fundamentals" | "Signals";
+type Tab = "Terminal" | "Markets" | "Analysis" | "Fundamentals" | "Signals" | "Settings";
 type Quote = { instrument: string; asOf: string; bid?: number; ask?: number; last?: number; change?: number; changePercent?: number; delayed?: boolean };
 type Candle = { time: string; open: number; high: number; low: number; close: number; volume?: number };
 type Instrument = { symbol: string; displayName: string; category: string; pricePrecision?: number };
@@ -49,7 +51,7 @@ function directionColor(value?: string) {
   return v === "bullish" ? C.lime : v === "bearish" ? C.red : v === "pending" ? C.amber : C.muted;
 }
 function Panel({ children, style }: { children: React.ReactNode; style?: object }) {
-  return <View style={[s.panel, style]}>{children}</View>;
+  return <View style={[s.panel, { backgroundColor: C.panel, borderColor: C.line }, style]}>{children}</View>;
 }
 function Eyebrow({ children }: { children: React.ReactNode }) {
   return <Text style={s.eyebrow}>{children}</Text>;
@@ -76,6 +78,8 @@ function CandleStick({ candle, min, max }: { candle: Candle; min: number; max: n
 
 export default function App() {
   const [tab, setTab] = useState<Tab>("Terminal");
+  const [theme, setTheme] = useState<"dark" | "light">("dark");
+  const changeTheme = (value: "dark" | "light") => { C = value === "dark" ? DARK_C : LIGHT_C; s = createStyles(); setTheme(value); };
   const [symbol, setSymbol] = useState("XAUUSD");
   const [timeframe, setTimeframe] = useState<Timeframe>("H1");
   const [quotes, setQuotes] = useState<Quote[]>([]);
@@ -213,24 +217,56 @@ export default function App() {
     </>;
   };
 
+  const renderSettings = () => (
+    <>
+      <PageHeading title="Settings" subtitle="Personalise your Veytrix workspace" status={marketStatus} />
+      <SectionTitle title="APPEARANCE" right="WORKSPACE" />
+      <Panel>
+        <Text style={s.marketSymbol}>Theme</Text>
+        <Text style={s.marketName}>Choose how Veytrix looks on this device.</Text>
+        <View style={{ flexDirection: "row", gap: 8, marginTop: 14 }}>
+          {(["dark", "light"] as const).map((value) => (
+            <Pressable key={value} onPress={() => changeTheme(value)} style={{ flex: 1, padding: 13, borderRadius: 9, borderWidth: 1, borderColor: theme === value ? C.lime : C.line, backgroundColor: theme === value ? (theme === "dark" ? "#1A2918" : "#EDF6E5") : C.panel2 }}>
+              <Text style={{ color: theme === value ? C.lime : C.text, fontWeight: "800", textTransform: "capitalize" }}>{value} mode</Text>
+              <Text style={{ color: C.muted, fontSize: 9, marginTop: 4 }}>{value === "dark" ? "Low-light terminal" : "Bright workspace"}</Text>
+            </Pressable>
+          ))}
+        </View>
+      </Panel>
+      <SectionTitle title="MARKET DATA" />
+      <Panel>
+        <View style={s.marketRow}><View style={{ flex: 1 }}><Text style={s.marketSymbol}>Market provider</Text><Text style={s.marketName}>{marketStatus?.provider ?? "Not connected"}</Text></View><StatusPill status={marketStatus?.state ?? "disconnected"} /></View>
+        <Text style={s.smallMuted}>{marketStatus?.message ?? errors.market ?? "The app checks your Veytrix API for market data."}</Text>
+        <Pressable onPress={() => void refresh()} style={[s.outlineButton, { alignSelf: "flex-start" }]}><Text style={s.outlineText}>REFRESH CONNECTION</Text></Pressable>
+      </Panel>
+      <SectionTitle title="WORKSPACE" />
+      <Panel>
+        <View style={s.marketRow}><View style={{ flex: 1 }}><Text style={s.marketSymbol}>Default instrument</Text><Text style={s.marketName}>The terminal opens with this selected market.</Text></View><Text style={{ color: C.lime, fontWeight: "900" }}>XAUUSD</Text></View>
+        <View style={s.marketRow}><View style={{ flex: 1 }}><Text style={s.marketSymbol}>Default timeframe</Text><Text style={s.marketName}>Current chart interval</Text></View><Text style={{ color: C.lime, fontWeight: "900" }}>{timeframe}</Text></View>
+      </Panel>
+      <SectionTitle title="ABOUT VEYTRIX" />
+      <Panel><Text style={s.marketSymbol}>VEYTRIX MARKET TERMINAL</Text><Text style={s.marketName}>Market analysis, technical tools and fundamental research in one workspace.</Text><Text style={[s.smallMuted, { marginTop: 10 }]}>Version 0.1.0 · Mobile workspace</Text></Panel>
+    </>
+  );
+
   const renderSignals = () => <>
     <PageHeading title="Signal Room" subtitle="Setups and directional bias" status={signalStatus} />
     {signals.length ? signals.map((item) => <SignalRow key={item.id} item={item} expanded />) : <Empty title="No active signals" detail={errors.signals ?? signalStatus?.message ?? "Signals will appear when the analysis engine returns results."} action="REFRESH" onAction={() => void refresh()} />}
   </>;
 
   return (
-    <View style={s.screen}>
-      <StatusBar barStyle="light-content" backgroundColor={C.bg} />
-      <View style={s.topBar}>
+    <View style={[s.screen, { backgroundColor: C.bg }]}>
+      <StatusBar barStyle={theme === "dark" ? "light-content" : "dark-content"} backgroundColor={C.bg} />
+      <View style={[s.topBar, { backgroundColor: C.bg, borderBottomColor: C.line }]}>
         <View style={s.brandRow}><View style={s.brandMark}><Text style={s.brandMarkText}>V</Text></View><View><Text style={s.brandName}>VEYTRIX</Text><Text style={s.brandSub}>MARKET TERMINAL</Text></View></View>
-        <View style={s.topRight}><StatusPill status={marketStatus?.state ?? "checking"} /><Pressable onPress={() => void refresh()} style={s.refreshButton}><Text style={s.refreshText}>↻</Text></Pressable></View>
+        <View style={s.topRight}><StatusPill status={marketStatus?.state ?? "disconnected"} /><Pressable accessibilityRole="button" accessibilityLabel="Toggle theme" onPress={() => changeTheme(theme === "dark" ? "light" : "dark")} style={s.refreshButton}><Text style={s.refreshText}>◐</Text></Pressable><Pressable onPress={() => void refresh()} style={s.refreshButton}><Text style={s.refreshText}>↻</Text></Pressable></View>
       </View>
       <ScrollView contentContainerStyle={s.content} showsVerticalScrollIndicator={false} refreshControl={<RefreshControl refreshing={loading} onRefresh={() => void refresh()} tintColor={C.lime} />}>
-        {tab === "Terminal" ? renderTerminal() : tab === "Markets" ? renderMarkets() : tab === "Analysis" ? renderAnalysis() : tab === "Fundamentals" ? renderFundamentals() : renderSignals()}
+        {tab === "Terminal" ? renderTerminal() : tab === "Markets" ? renderMarkets() : tab === "Analysis" ? renderAnalysis() : tab === "Fundamentals" ? renderFundamentals() : tab === "Signals" ? renderSignals() : renderSettings()}
         <Text style={s.footer}>Prices and events are supplied by connected providers.</Text>
       </ScrollView>
-      <View style={s.bottomNav}>
-        {(["Terminal", "Markets", "Analysis", "Fundamentals", "Signals"] as Tab[]).map((item) => <Pressable key={item} onPress={() => setTab(item)} style={s.navItem}><Text style={[s.navLabel, tab === item && s.navLabelActive]}>{item}</Text>{tab === item ? <View style={s.navIndicator} /> : null}</Pressable>)}
+      <View style={[s.bottomNav, { backgroundColor: C.bg, borderTopColor: C.line }]}>
+        {(["Terminal", "Markets", "Analysis", "Fundamentals", "Signals", "Settings"] as Tab[]).map((item) => <Pressable key={item} onPress={() => setTab(item)} style={s.navItem}><Text style={[s.navLabel, tab === item && s.navLabelActive]}>{item}</Text>{tab === item ? <View style={s.navIndicator} /> : null}</Pressable>)}
       </View>
     </View>
   );
@@ -254,7 +290,7 @@ function EventNumber({ label, value, unit }: { label: string; value: number | nu
   return <View style={s.eventNumber}><Eyebrow>{label}</Eyebrow><Text style={s.eventNumberValue}>{value === null ? "—" : `${value}${unit ? ` ${unit}` : ""}`}</Text></View>;
 }
 
-const s = StyleSheet.create({
+const createStyles = () => StyleSheet.create({
   screen: { flex: 1, backgroundColor: C.bg },
   topBar: { paddingTop: 48, paddingHorizontal: 18, paddingBottom: 14, flexDirection: "row", alignItems: "center", justifyContent: "space-between", borderBottomWidth: 1, borderBottomColor: C.line },
   brandRow: { flexDirection: "row", alignItems: "center", gap: 10 },
@@ -362,3 +398,5 @@ const s = StyleSheet.create({
   navLabelActive: { color: C.lime, fontWeight: "900" },
   navIndicator: { width: 15, height: 2, borderRadius: 2, backgroundColor: C.lime },
 });
+
+let s = createStyles();
