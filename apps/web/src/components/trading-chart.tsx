@@ -3,7 +3,6 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import type { ChartTimeframe, MarketInstrument } from "@veytrix/shared";
 import { useHydrated, usePreferences } from "./theme-provider";
-import { useMarketFavorites } from "./market-watch";
 
 const timeframes: ChartTimeframe[] = [
   "M1",
@@ -105,26 +104,21 @@ export function TradingChart({
 
   const hydrated = useHydrated();
   const { preferences, updatePreferences } = usePreferences();
-  const { favorites } = useMarketFavorites();
   const resolvedTheme = useSyncExternalStore(
     subscribeToResolvedTheme,
     getResolvedTheme,
     getServerTheme,
   );
 
-  const favoriteInstruments = instruments.filter((instrument) =>
-    favorites.includes(instrument.symbol),
-  );
-  const activeInstrument = favoriteInstruments.some(
-    (instrument) => instrument.symbol === selectedInstrument,
+  // Charts must work for every provider-supported instrument, not only favourites.
+  const activeInstrument = instruments.some(
+    (item) => item.symbol === selectedInstrument,
   )
     ? selectedInstrument
-    : favoriteInstruments.some(
-          (instrument) => instrument.symbol === initialInstrument,
-        )
+    : instruments.some((item) => item.symbol === initialInstrument)
       ? initialInstrument
-      : (favoriteInstruments[0]?.symbol ?? "");
-  const instrument = favoriteInstruments.find(
+      : (instruments[0]?.symbol ?? "");
+  const instrument = instruments.find(
     (item) => item.symbol === activeInstrument,
   );
   const symbol = toTradingViewSymbol(instrument);
@@ -273,10 +267,10 @@ export function TradingChart({
             value={activeInstrument}
             onChange={(event) => setSelectedInstrument(event.target.value)}
           >
-            {favoriteInstruments.length === 0 && (
-              <option value="">No favourite instruments</option>
+            {instruments.length === 0 && (
+              <option value="">No instruments available</option>
             )}
-            {favoriteInstruments.map((item) => (
+            {instruments.map((item) => (
               <option key={item.symbol} value={item.symbol}>
                 {item.symbol}
               </option>
