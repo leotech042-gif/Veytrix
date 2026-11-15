@@ -115,16 +115,20 @@ export function TradingChart({
   const favoriteInstruments = instruments.filter((instrument) =>
     favorites.includes(instrument.symbol),
   );
-  const activeInstrument = favoriteInstruments.some(
+  const chartInstruments = favoriteInstruments.length > 0
+    ? favoriteInstruments
+    : instruments;
+  const preferredInstrument = initialInstrument || "XAUUSD";
+  const activeInstrument = chartInstruments.some(
     (instrument) => instrument.symbol === selectedInstrument,
   )
     ? selectedInstrument
-    : favoriteInstruments.some(
-          (instrument) => instrument.symbol === initialInstrument,
+    : chartInstruments.some(
+          (instrument) => instrument.symbol === preferredInstrument,
         )
-      ? initialInstrument
-      : (favoriteInstruments[0]?.symbol ?? "");
-  const instrument = favoriteInstruments.find(
+      ? preferredInstrument
+      : (chartInstruments[0]?.symbol ?? "");
+  const instrument = chartInstruments.find(
     (item) => item.symbol === activeInstrument,
   );
   const symbol = toTradingViewSymbol(instrument);
@@ -273,10 +277,10 @@ export function TradingChart({
             value={activeInstrument}
             onChange={(event) => setSelectedInstrument(event.target.value)}
           >
-            {favoriteInstruments.length === 0 && (
+            {chartInstruments.length === 0 && (
               <option value="">No favourite instruments</option>
             )}
-            {favoriteInstruments.map((item) => (
+            {chartInstruments.map((item) => (
               <option key={item.symbol} value={item.symbol}>
                 {item.symbol}
               </option>
