@@ -1,0 +1,37 @@
+import { Suspense } from "react";
+import type { Metadata } from "next";
+import { ThemeProvider, themeBootstrapScript } from "@/components/theme-provider";
+import { WorkspaceShell } from "@/components/workspace-shell";
+import "./globals.css";
+
+export const metadata: Metadata = {
+  title: {
+    default: "Veytrix | Forex workspace",
+    template: "%s | Veytrix",
+  },
+  description:
+    "A transparent forex workspace for market data, charts, and trading tools.",
+};
+
+export default function RootLayout({ children }: LayoutProps<"/">) {
+  return (
+    <html lang="en" suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: themeBootstrapScript }} />
+      </head>
+      <body>
+        <ThemeProvider>
+          <Suspense
+            fallback={
+              <div className="workspace-loading" role="status">
+                Loading Veytrix workspace…
+              </div>
+            }
+          >
+            <WorkspaceShell>{children}</WorkspaceShell>
+          </Suspense>
+        </ThemeProvider>
+      </body>
+    </html>
+  );
+}
