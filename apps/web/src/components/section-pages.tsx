@@ -1166,195 +1166,54 @@ function SettingsPage() {
   const { preferences, updatePreferences } = usePreferences();
   const feed = useMarketFeed();
   const hydrated = useHydrated();
-
   return (
     <>
-      <PageHeading
-        eyebrow="WORKSPACE PREFERENCES"
-        title="Settings"
-        description="Personalize this browser's workspace. Secrets and broker credentials are never saved here."
-      />
-      <div className="settings-grid">
-        <section className="panel settings-panel">
-          <h2>Appearance</h2>
-          <p className="panel-description">
-            Choose a theme or follow your operating system.
-          </p>
-          <div className="setting-control">
-            <span className="setting-label">Color theme</span>
-            <div
-              className="segmented-control"
-              role="group"
-              aria-label="Color theme"
-            >
-              {(["light", "dark", "system"] as ThemePreference[]).map(
-                (theme) => (
-                  <button
-                    type="button"
-                    key={theme}
-                    className={
-                      (hydrated ? preferences.theme : "system") === theme
-                        ? "selected"
-                        : ""
-                    }
-                    aria-pressed={
-                      (hydrated ? preferences.theme : "system") === theme
-                    }
-                    onClick={() => updatePreferences({ theme })}
-                  >
-                    {theme[0].toLocaleUpperCase() + theme.slice(1)}
-                  </button>
-                ),
-              )}
+      <PageHeading eyebrow="PERSONAL WORKSPACE" title="Settings" description="Fine-tune the Veytrix experience. Your interface preferences are stored locally in this browser." />
+      <div className="settings-overview">
+        <div className="settings-overview-mark" aria-hidden="true">✳</div>
+        <div><strong>Your workspace, your rules.</strong><p>Appearance and chart defaults apply across your Veytrix workspace.</p></div>
+        <span className="settings-local-badge"><i /> Local preferences</span>
+      </div>
+      <div className="settings-layout">
+        <nav className="settings-index" aria-label="Settings sections">
+          <a href="#appearance"><span>◐</span> Appearance</a><a href="#chart-defaults"><span>⌁</span> Chart defaults</a><a href="#connections"><span>◈</span> Connections</a><a href="#social"><span>↗</span> Social profiles</a>
+        </nav>
+        <div className="settings-content">
+          <section className="panel settings-panel settings-section" id="appearance">
+            <div className="settings-section-heading"><div><span className="settings-kicker">01 / INTERFACE</span><h2>Appearance</h2><p className="panel-description">Set the visual tone of your trading workspace.</p></div><span className="settings-section-icon">◐</span></div>
+            <div className="setting-control"><div><span className="setting-label">Color theme</span><small>Choose how Veytrix looks on this device.</small></div><div className="segmented-control" role="group" aria-label="Color theme">
+              {(["light", "dark", "system"] as ThemePreference[]).map((theme) => <button type="button" key={theme} className={(hydrated ? preferences.theme : "system") === theme ? "selected" : ""} aria-pressed={(hydrated ? preferences.theme : "system") === theme} onClick={() => updatePreferences({ theme })}>{theme[0].toLocaleUpperCase() + theme.slice(1)}</button>)}
+            </div></div>
+            <div className="settings-color-grid">
+              <ColorSetting label="Accent color" value={hydrated ? preferences.accentColor : "#c6f36b"} onChange={(accentColor) => updatePreferences({ accentColor })} />
+              <ColorSetting label="Chart background" value={hydrated ? preferences.chartBackground : "#0e141d"} onChange={(chartBackground) => updatePreferences({ chartBackground })} />
+              <ColorSetting label="Bullish candle" value={hydrated ? preferences.bullishColor : "#8bd878"} onChange={(bullishColor) => updatePreferences({ bullishColor })} />
+              <ColorSetting label="Bearish candle" value={hydrated ? preferences.bearishColor : "#ed7777"} onChange={(bearishColor) => updatePreferences({ bearishColor })} />
             </div>
-          </div>
-          <ColorSetting
-            label="Accent color"
-            value={hydrated ? preferences.accentColor : "#c6f36b"}
-            onChange={(accentColor) => updatePreferences({ accentColor })}
-          />
-          <ColorSetting
-            label="Chart background"
-            value={hydrated ? preferences.chartBackground : "#0e141d"}
-            onChange={(chartBackground) =>
-              updatePreferences({ chartBackground })
-            }
-          />
-          <ColorSetting
-            label="Bullish candle"
-            value={hydrated ? preferences.bullishColor : "#8bd878"}
-            onChange={(bullishColor) => updatePreferences({ bullishColor })}
-          />
-          <ColorSetting
-            label="Bearish candle"
-            value={hydrated ? preferences.bearishColor : "#ed7777"}
-            onChange={(bearishColor) => updatePreferences({ bearishColor })}
-          />
-        </section>
-
-        <section className="panel settings-panel">
-          <h2>Chart defaults</h2>
-          <p className="panel-description">
-            Saved locally in this browser and applied to the chart.
-          </p>
-          <label className="setting-control">
-            <span className="setting-label">Default timeframe</span>
-            <select
-              value={hydrated ? preferences.defaultTimeframe : "H1"}
-              onChange={(event) =>
-                updatePreferences({
-                  defaultTimeframe: event.target
-                    .value as typeof preferences.defaultTimeframe,
-                })
-              }
-            >
-              {["M1", "M5", "M15", "M30", "H1", "H4", "D1", "W1"].map(
-                (timeframe) => (
-                  <option value={timeframe} key={timeframe}>
-                    {timeframe}
-                  </option>
-                ),
-              )}
-            </select>
-          </label>
-          <label className="setting-control">
-            <span className="setting-label">Default instrument</span>
-            <select
-              value={hydrated ? preferences.defaultInstrument : ""}
-              onChange={(event) =>
-                updatePreferences({ defaultInstrument: event.target.value })
-              }
-              disabled={feed.instruments.length === 0}
-            >
-              <option value="">
-                {feed.instruments.length
-                  ? "Choose an instrument"
-                  : "No supported instruments available"}
-              </option>
-              {feed.instruments.map((instrument) => (
-                <option value={instrument.symbol} key={instrument.symbol}>
-                  {instrument.symbol} · {instrument.displayName}
-                </option>
-              ))}
-            </select>
-          </label>
-          <div className="settings-inline-status">
-            {feed.status?.state === "connected"
-              ? `Provider: ${feed.status.provider}`
-              : (feed.error ?? "No provider is connected.")}
-          </div>
-        </section>
-
-        <section className="panel settings-panel">
-          <h2>Account and provider</h2>
-          <p className="panel-description">
-            Authentication and broker connections have not been implemented.
-          </p>
-          <div className="integration-callout">
-            <strong>Keep provider secrets server-side</strong>
-            <p>
-              Select a licensed provider and configure its credentials in the
-              API&apos;s local environment. Do not enter credentials in this
-              page or browser storage. A provider connection test will be
-              available only when a compatible adapter supports it.
-            </p>
-          </div>
-          <p className="settings-inline-status">
-            Account profile, sign-out, price alerts, and notification settings
-            require additional integrations.
-          </p>
-        </section>
-
-        <section className="panel settings-panel">
-          <h2>Official social profiles</h2>
-          <p className="panel-description">
-            Only project-configured official URLs are displayed. Update public
-            URL variables in the web app environment to change these links.
-          </p>
-          <div className="configured-social-links">
-            {getOfficialSocialLinks().length > 0 ? (
-              getOfficialSocialLinks().map((link) => (
-                <a
-                  className="secondary-button"
-                  href={link.url}
-                  key={link.label}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  {link.label}
-                </a>
-              ))
-            ) : (
-              <span className="settings-inline-status">
-                No official social URLs are configured.
-              </span>
-            )}
-          </div>
-        </section>
+          </section>
+          <section className="panel settings-panel settings-section" id="chart-defaults">
+            <div className="settings-section-heading"><div><span className="settings-kicker">02 / ANALYSIS</span><h2>Chart defaults</h2><p className="panel-description">Choose the starting view for your technical analysis.</p></div><span className="settings-section-icon">⌁</span></div>
+            <label className="setting-control"><div><span className="setting-label">Default timeframe</span><small>Applied when opening a chart.</small></div><select value={hydrated ? preferences.defaultTimeframe : "H1"} onChange={(event) => updatePreferences({ defaultTimeframe: event.target.value as typeof preferences.defaultTimeframe })}>{["M1", "M5", "M15", "M30", "H1", "H4", "D1", "W1"].map((timeframe) => <option value={timeframe} key={timeframe}>{timeframe}</option>)}</select></label>
+            <label className="setting-control"><div><span className="setting-label">Default instrument</span><small>Preferred market when charts load.</small></div><select value={hydrated ? preferences.defaultInstrument : ""} onChange={(event) => updatePreferences({ defaultInstrument: event.target.value })} disabled={feed.instruments.length === 0}><option value="">{feed.instruments.length ? "Choose an instrument" : "No supported instruments available"}</option>{feed.instruments.map((instrument) => <option value={instrument.symbol} key={instrument.symbol}>{instrument.symbol} · {instrument.displayName}</option>)}</select></label>
+            <div className="settings-provider-status"><span className="state-dot" />{feed.status?.state === "connected" ? `Provider: ${feed.status.provider}` : (feed.error ?? "No market-data provider connected")}</div>
+          </section>
+          <section className="panel settings-panel settings-section" id="connections">
+            <div className="settings-section-heading"><div><span className="settings-kicker">03 / INFRASTRUCTURE</span><h2>Connections & security</h2><p className="panel-description">Manage the services that power your market workspace.</p></div><span className="settings-section-icon">◈</span></div>
+            <div className="integration-callout"><strong>Provider credentials stay on the server</strong><p>Authentication and broker connections are not yet implemented. Configure licensed provider credentials in the API environment only. Never enter API secrets or broker passwords in this page or browser storage.</p></div>
+            <p className="settings-inline-status">Account profile, broker linking, sign-out, price alerts and notifications will appear here when their secure integrations are implemented.</p>
+          </section>
+          <section className="panel settings-panel settings-section" id="social">
+            <div className="settings-section-heading"><div><span className="settings-kicker">04 / VEYTRIX</span><h2>Official channels</h2><p className="panel-description">Find Veytrix across its configured public platforms.</p></div><span className="settings-section-icon">↗</span></div>
+            <div className="configured-social-links">{getOfficialSocialLinks().length > 0 ? getOfficialSocialLinks().map((link) => <a className="secondary-button" href={link.url} key={link.label} target="_blank" rel="noopener noreferrer">{link.label}<span aria-hidden="true">↗</span></a>) : <span className="settings-inline-status">No official social URLs are configured yet.</span>}</div>
+          </section>
+        </div>
       </div>
     </>
   );
 }
 
-function ColorSetting({
-  label,
-  value,
-  onChange,
-}: {
-  label: string;
-  value: string;
-  onChange: (value: string) => void;
-}) {
-  return (
-    <label className="setting-control">
-      <span className="setting-label">{label}</span>
-      <input
-        type="color"
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-      />
-    </label>
-  );
+function ColorSetting({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
+  return <label className="setting-control color-setting-control"><span className="setting-label">{label}</span><input type="color" value={value} onChange={(event) => onChange(event.target.value)} /></label>;
 }
 
 function FaqPage() {
