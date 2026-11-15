@@ -155,14 +155,15 @@ export function TradingChart({
       ? (widgetLoadResult.error ?? null)
       : null;
   useEffect(() => {
-    const container = widgetRef.current;
-    const widget = container?.querySelector<HTMLDivElement>(
-      ".tradingview-widget-container__widget",
-    );
-    if (!container || !widget || !symbol) return;
+    const widget = widgetRef.current;
+    if (!widget || !symbol) return;
 
     let active = true;
-    widget.replaceChildren();
+    const embedContainer = document.createElement("div");
+    embedContainer.className = "tradingview-widget-generation";
+    embedContainer.style.width = "100%";
+    embedContainer.style.height = "100%";
+    widget.replaceChildren(embedContainer);
 
     const studies = [
       ...(showSma ? ["MASimple@tv-basicstudies"] : []),
@@ -213,20 +214,11 @@ export function TradingChart({
         });
       }
     };
-
-    // TradingView expects the script to be a direct child of its outer
-    // .tradingview-widget-container, alongside the inner widget mount point.
-    // Defer insertion one frame so React Strict Mode's development-only
-    // setup/cleanup check cannot detach the container before the script runs.
-    const frame = window.requestAnimationFrame(() => {
-      if (active) container.appendChild(script);
-    });
+    embedContainer.appendChild(script);
 
     return () => {
       active = false;
-      window.cancelAnimationFrame(frame);
-      script.remove();
-      widget.replaceChildren();
+      embedContainer.remove();
     };
   }, [
     chartBackground,
@@ -366,15 +358,9 @@ export function TradingChart({
           aria-label="Veytrix interactive chart"
         >
           <div
-            className="tradingview-widget-container"
+            className="tradingview-widget-container__widget"
             ref={widgetRef}
-            style={{ width: "100%", height: "100%" }}
-          >
-            <div
-              className="tradingview-widget-container__widget"
-              style={{ width: "100%", height: "100%" }}
-            />
-          </div>
+          />
         </div>
         {(loading || error || !symbol) && (
           <div className="chart-overlay" role={error ? "alert" : "status"}>
