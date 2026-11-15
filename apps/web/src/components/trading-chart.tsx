@@ -155,15 +155,14 @@ export function TradingChart({
       ? (widgetLoadResult.error ?? null)
       : null;
   useEffect(() => {
-    const widget = widgetRef.current;
-    if (!widget || !symbol) return;
+    const container = widgetRef.current;
+    const widget = container?.querySelector<HTMLDivElement>(
+      ".tradingview-widget-container__widget",
+    );
+    if (!container || !widget || !symbol) return;
 
     let active = true;
-    const embedContainer = document.createElement("div");
-    embedContainer.className = "tradingview-widget-generation";
-    embedContainer.style.width = "100%";
-    embedContainer.style.height = "100%";
-    widget.replaceChildren(embedContainer);
+    widget.replaceChildren();
 
     const studies = [
       ...(showSma ? ["MASimple@tv-basicstudies"] : []),
@@ -214,11 +213,16 @@ export function TradingChart({
         });
       }
     };
-    embedContainer.appendChild(script);
+
+    // TradingView expects the script to be a direct child of its outer
+    // .tradingview-widget-container, alongside the inner widget mount point.
+    // Putting the script inside the inner mount point breaks its iframe lookup.
+    container.appendChild(script);
 
     return () => {
       active = false;
-      embedContainer.remove();
+      script.remove();
+      widget.replaceChildren();
     };
   }, [
     chartBackground,
@@ -358,9 +362,15 @@ export function TradingChart({
           aria-label="Veytrix interactive chart"
         >
           <div
-            className="tradingview-widget-container__widget"
+            className="tradingview-widget-container"
             ref={widgetRef}
-          />
+            style={{ width: "100%", height: "100%" }}
+          >
+            <div
+              className="tradingview-widget-container__widget"
+              style={{ width: "100%", height: "100%" }}
+            />
+          </div>
         </div>
         {(loading || error || !symbol) && (
           <div className="chart-overlay" role={error ? "alert" : "status"}>
