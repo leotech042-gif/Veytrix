@@ -27,8 +27,8 @@ type Signal = { id: string; instrument: string; type: "setup" | "bias"; directio
 type ProviderStatus = { state: "connected" | "unconfigured" | "disconnected"; provider: string | null; message: string; updatedAt?: string; delayed?: boolean };
 
 async function request<T>(path: string): Promise<T> {
-  const response = await fetch(\`\${API}\${path}\`);
-  if (!response.ok) throw new Error(\`Request failed (\${response.status})\`);
+  const response = await fetch(`${API}${path}`);
+  if (!response.ok) throw new Error(`Request failed (${response.status})`);
   return response.json() as Promise<T>;
 }
 function price(value?: number, precision?: number) {
@@ -71,7 +71,7 @@ function CandleStick({ candle, min, max }: { candle: Candle; min: number; max: n
   const bodyTop = ((max - Math.max(candle.open, candle.close)) / range) * 100;
   const bodyBottom = ((max - Math.min(candle.open, candle.close)) / range) * 100;
   const color = candle.close >= candle.open ? C.lime : C.red;
-  return <View style={s.candleSlot}><View style={[s.wick, { top: \`\${top}%\`, height: \`\${Math.max(bottom - top, 1)}%\`, backgroundColor: color }]} /><View style={[s.candleBody, { top: \`\${bodyTop}%\`, height: \`\${Math.max(bodyBottom - bodyTop, 1.2)}%\`, backgroundColor: color }]} /></View>;
+  return <View style={s.candleSlot}><View style={[s.wick, { top: `${top}%`, height: `${Math.max(bottom - top, 1)}%`, backgroundColor: color }]} /><View style={[s.candleBody, { top: `${bodyTop}%`, height: `${Math.max(bodyBottom - bodyTop, 1.2)}%`, backgroundColor: color }]} /></View>;
 }
 
 export default function App() {
@@ -122,7 +122,7 @@ export default function App() {
 
   const loadHistory = useCallback(async () => {
     try {
-      const data = await request<Candle[]>(\`/market-data/history?instrument=\${encodeURIComponent(symbol)}&timeframe=\${timeframe}\`);
+      const data = await request<Candle[]>(`/market-data/history?instrument=${encodeURIComponent(symbol)}&timeframe=${timeframe}`);
       setCandles(data);
     } catch {
       setCandles([]);
@@ -147,7 +147,7 @@ export default function App() {
         </View>
         <View style={s.priceBlock}>
           <Text style={s.lastPrice}>{price(quote?.last, instrument?.pricePrecision)}</Text>
-          <Text style={[s.changeText, { color: (quote?.change ?? 0) >= 0 ? C.lime : C.red }]}>{quote?.changePercent === undefined ? "—" : \`\${quote.changePercent >= 0 ? "+" : ""}\${quote.changePercent.toFixed(2)}%\`}</Text>
+          <Text style={[s.changeText, { color: (quote?.change ?? 0) >= 0 ? C.lime : C.red }]}>{quote?.changePercent === undefined ? "—" : `${quote.changePercent >= 0 ? "+" : ""}${quote.changePercent.toFixed(2)}%`}</Text>
         </View>
       </View>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.symbolRail} contentContainerStyle={s.symbolRailContent}>
@@ -156,13 +156,13 @@ export default function App() {
         )}
       </ScrollView>
       <Panel style={{ padding: 12 }}>
-        <View style={s.chartHeader}><View style={s.rowCenter}><Text style={s.chartTitle}>CHART</Text><StatusPill status={marketStatus?.state ?? "checking"} label={quote?.delayed ? "DELAYED" : marketStatus?.state === "connected" ? "LIVE FEED" : undefined} /></View><Text style={s.chartMeta}>{chart.length ? \`\${chart.length} bars\` : "—"}</Text></View>
+        <View style={s.chartHeader}><View style={s.rowCenter}><Text style={s.chartTitle}>CHART</Text><StatusPill status={marketStatus?.state ?? "checking"} label={quote?.delayed ? "DELAYED" : marketStatus?.state === "connected" ? "LIVE FEED" : undefined} /></View><Text style={s.chartMeta}>{chart.length ? `${chart.length} bars` : "—"}</Text></View>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.timeframeRail}>
           {TIMEFRAMES.map((item) => <Pressable key={item} onPress={() => setTimeframe(item)} style={[s.timeframe, timeframe === item && s.timeframeActive]}><Text style={[s.timeframeText, timeframe === item && s.timeframeTextActive]}>{item}</Text></Pressable>)}
         </ScrollView>
         <View style={s.chartArea}>
           <View style={[s.gridLine, { top: "25%" }]} /><View style={[s.gridLine, { top: "50%" }]} /><View style={[s.gridLine, { top: "75%" }]} />
-          {chart.length ? <View style={s.candlesRow}>{chart.map((c, i) => <CandleStick key={\`\${c.time}-\${i}\`} candle={c} min={bounds.min} max={bounds.max} />)}</View> :
+          {chart.length ? <View style={s.candlesRow}>{chart.map((c, i) => <CandleStick key={`${c.time}-${i}`} candle={c} min={bounds.min} max={bounds.max} />)}</View> :
             <View style={s.chartEmpty}><Text style={s.chartEmptyTitle}>No chart data</Text><Text style={s.chartEmptyText}>Historical prices will appear when the market feed is available.</Text></View>}
         </View>
         <View style={s.chartFooter}><Text style={s.chartMeta}>{chart[0] ? dateLabel(chart[0].time) : "—"}</Text><Text style={s.chartMeta}>{chart[chart.length - 1] ? clock(chart[chart.length - 1].time) : "—"}</Text></View>
@@ -172,7 +172,7 @@ export default function App() {
         <Panel style={s.quoteCard}><Eyebrow>ASK</Eyebrow><Text style={[s.quoteValue, { color: C.lime }]}>{price(quote?.ask, instrument?.pricePrecision)}</Text></Panel>
         <Panel style={s.quoteCard}><Eyebrow>SPREAD</Eyebrow><Text style={s.quoteValue}>{quote?.spread === undefined && (quote?.ask === undefined || quote?.bid === undefined) ? "—" : price(quote?.spread ?? (quote!.ask! - quote!.bid!), instrument?.pricePrecision)}</Text></Panel>
       </View>
-      <SectionTitle title="LATEST SIGNALS" right={selectedSignals.length ? \`\${selectedSignals.length} results\` : "—"} />
+      <SectionTitle title="LATEST SIGNALS" right={selectedSignals.length ? `${selectedSignals.length} results` : "—"} />
       {selectedSignals.length ? selectedSignals.slice(0, 2).map((item) => <SignalRow key={item.id} item={item} />) : <Panel><Text style={s.smallMuted}>No signal available for {symbol}.</Text></Panel>}
       <SectionTitle title="NEXT ECONOMIC EVENTS" right="CALENDAR" />
       {events.slice(0, 2).map((event) => <EventRow key={event.id} event={event} />)}
@@ -185,14 +185,14 @@ export default function App() {
       <PageHeading title="Markets" subtitle="Live instruments" status={marketStatus} />
       {instruments.length ? instruments.map((item) => {
         const q = quotes.find((entry) => entry.instrument === item.symbol);
-        return <Pressable key={item.symbol} onPress={() => { setSymbol(item.symbol); setTab("Terminal"); }}><Panel style={s.marketRow}><View style={{ flex: 1 }}><Text style={s.marketSymbol}>{item.symbol}</Text><Text style={s.marketName}>{item.displayName}</Text></View><View style={{ alignItems: "flex-end" }}><Text style={s.marketPrice}>{price(q?.last, item.pricePrecision)}</Text><Text style={[s.marketChange, { color: (q?.change ?? 0) >= 0 ? C.lime : C.red }]}>{q?.changePercent === undefined ? "—" : \`\${q.changePercent >= 0 ? "+" : ""}\${q.changePercent.toFixed(2)}%\`}</Text></View></Panel></Pressable>;
+        return <Pressable key={item.symbol} onPress={() => { setSymbol(item.symbol); setTab("Terminal"); }}><Panel style={s.marketRow}><View style={{ flex: 1 }}><Text style={s.marketSymbol}>{item.symbol}</Text><Text style={s.marketName}>{item.displayName}</Text></View><View style={{ alignItems: "flex-end" }}><Text style={s.marketPrice}>{price(q?.last, item.pricePrecision)}</Text><Text style={[s.marketChange, { color: (q?.change ?? 0) >= 0 ? C.lime : C.red }]}>{q?.changePercent === undefined ? "—" : `${q.changePercent >= 0 ? "+" : ""}${q.changePercent.toFixed(2)}%`}</Text></View></Panel></Pressable>;
       }) : <Empty title="No instruments" detail={errors.market ?? "Connect a supported market-data provider to see available symbols."} action="REFRESH" onAction={() => void refresh()} />}
     </>
   );
 
   const renderAnalysis = () => (
     <>
-      <PageHeading title="Analysis" subtitle={\`Technical signals · \${symbol}\`} status={signalStatus} />
+      <PageHeading title="Analysis" subtitle={`Technical signals · ${symbol}`} status={signalStatus} />
       <View style={s.selectorRail}>{instruments.slice(0, 6).map((item) => <Pressable key={item.symbol} onPress={() => setSymbol(item.symbol)} style={[s.symbolChip, symbol === item.symbol && s.symbolChipActive]}><Text style={[s.symbolChipText, symbol === item.symbol && s.symbolChipTextActive]}>{item.symbol}</Text></Pressable>)}</View>
       {selectedSignals.length ? selectedSignals.map((item) => <SignalRow key={item.id} item={item} expanded />) : <Empty title="No analysis available" detail={errors.signals ?? "The signal engine has not returned a setup for this instrument."} action="REFRESH" onAction={() => void refresh()} />}
     </>
@@ -209,7 +209,7 @@ export default function App() {
       </View>
       {sorted.length ? sorted.map((event) => <EventRow key={event.id} event={event} expanded />) : <Empty title="Calendar unavailable" detail={errors.fundamentals ?? fundStatus?.message ?? "Economic events will appear when the calendar provider is connected."} action="REFRESH" onAction={() => void refresh()} />}
       <SectionTitle title="CURRENCY BIAS" />
-      {sorted.filter((event) => event.currencyBias && event.currencyBias !== "pending").slice(0, 6).map((event) => <Panel key={\`bias-\${event.id}\`} style={s.biasRow}><View style={{ flex: 1 }}><Text style={s.marketSymbol}>{event.currency}</Text><Text style={s.marketName} numberOfLines={1}>{event.event}</Text></View><Text style={[s.biasText, { color: directionColor(event.currencyBias) }]}>{event.currencyBias.toUpperCase()}</Text></Panel>)}
+      {sorted.filter((event) => event.currencyBias && event.currencyBias !== "pending").slice(0, 6).map((event) => <Panel key={`bias-${event.id}`} style={s.biasRow}><View style={{ flex: 1 }}><Text style={s.marketSymbol}>{event.currency}</Text><Text style={s.marketName} numberOfLines={1}>{event.event}</Text></View><Text style={[s.biasText, { color: directionColor(event.currencyBias) }]}>{event.currencyBias.toUpperCase()}</Text></Panel>)}
     </>;
   };
 
@@ -248,10 +248,10 @@ function Level({ label, value }: { label: string; value?: number }) {
 }
 function EventRow({ event, expanded }: { event: Event; expanded?: boolean }) {
   const impactColor = event.impact === "high" ? C.red : event.impact === "medium" ? C.amber : C.muted;
-  return <Panel style={s.eventCard}><View style={s.eventTop}><View style={{ flex: 1 }}><View style={s.eventMeta}><Text style={s.eventCurrency}>{event.currency}</Text><Text style={[s.impact, { color: impactColor }]}>{event.impact.toUpperCase()}</Text><Text style={s.eventTime}>{dateLabel(event.time)} · {clock(event.time)}</Text></View><Text style={s.eventName}>{event.event}</Text></View><Text style={[s.eventBias, { color: directionColor(event.currencyBias) }]}>{event.currencyBias === "pending" ? "—" : event.currencyBias.toUpperCase()}</Text></View><View style={s.eventNumbers}><EventNumber label="ACTUAL" value={event.actual} unit={event.unit} /><EventNumber label="FORECAST" value={event.estimate} unit={event.unit} /><EventNumber label="PREVIOUS" value={event.previous} unit={event.unit} /></View>{expanded && event.affectedPairs?.length ? <Text style={s.affectedPairs}>AFFECTED  {event.affectedPairs.slice(0, 5).map((pair) => \`\${pair.symbol} \${pair.bias}\`).join("   ·   ")}</Text> : null}</Panel>;
+  return <Panel style={s.eventCard}><View style={s.eventTop}><View style={{ flex: 1 }}><View style={s.eventMeta}><Text style={s.eventCurrency}>{event.currency}</Text><Text style={[s.impact, { color: impactColor }]}>{event.impact.toUpperCase()}</Text><Text style={s.eventTime}>{dateLabel(event.time)} · {clock(event.time)}</Text></View><Text style={s.eventName}>{event.event}</Text></View><Text style={[s.eventBias, { color: directionColor(event.currencyBias) }]}>{event.currencyBias === "pending" ? "—" : event.currencyBias.toUpperCase()}</Text></View><View style={s.eventNumbers}><EventNumber label="ACTUAL" value={event.actual} unit={event.unit} /><EventNumber label="FORECAST" value={event.estimate} unit={event.unit} /><EventNumber label="PREVIOUS" value={event.previous} unit={event.unit} /></View>{expanded && event.affectedPairs?.length ? <Text style={s.affectedPairs}>AFFECTED  {event.affectedPairs.slice(0, 5).map((pair) => `${pair.symbol} ${pair.bias}`).join("   ·   ")}</Text> : null}</Panel>;
 }
 function EventNumber({ label, value, unit }: { label: string; value: number | null; unit?: string }) {
-  return <View style={s.eventNumber}><Eyebrow>{label}</Eyebrow><Text style={s.eventNumberValue}>{value === null ? "—" : \`\${value}\${unit ? \` \${unit}\` : ""}\`}</Text></View>;
+  return <View style={s.eventNumber}><Eyebrow>{label}</Eyebrow><Text style={s.eventNumberValue}>{value === null ? "—" : `${value}${unit ? ` ${unit}` : ""}`}</Text></View>;
 }
 
 const s = StyleSheet.create({
