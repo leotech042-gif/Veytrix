@@ -1,0 +1,21 @@
+{
+  "expo": {
+    "name": "Veytrix",
+    "slug": "veytrix",
+    "scheme": "veytrix",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "backgroundColor": "#080B09",
+    "android": {
+      "package": "com.veytrix.app",
+      "adaptiveIcon": {
+        "backgroundColor": "#080B09"
+      }
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.veytrix.app"
+    }
+  }
+}
