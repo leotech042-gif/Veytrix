@@ -115,16 +115,20 @@ export function TradingChart({
   const favoriteInstruments = instruments.filter((instrument) =>
     favorites.includes(instrument.symbol),
   );
-  const activeInstrument = favoriteInstruments.some(
+  // Keep favourites as the preferred chart list, but never leave the chart
+  // without a symbol when the user has not starred any instruments yet.
+  const chartInstruments =
+    favoriteInstruments.length > 0 ? favoriteInstruments : instruments;
+  const activeInstrument = chartInstruments.some(
     (instrument) => instrument.symbol === selectedInstrument,
   )
     ? selectedInstrument
-    : favoriteInstruments.some(
+    : chartInstruments.some(
           (instrument) => instrument.symbol === initialInstrument,
         )
       ? initialInstrument
-      : (favoriteInstruments[0]?.symbol ?? "");
-  const instrument = favoriteInstruments.find(
+      : (chartInstruments[0]?.symbol ?? "");
+  const instrument = chartInstruments.find(
     (item) => item.symbol === activeInstrument,
   );
   const symbol = toTradingViewSymbol(instrument);
@@ -273,10 +277,10 @@ export function TradingChart({
             value={activeInstrument}
             onChange={(event) => setSelectedInstrument(event.target.value)}
           >
-            {favoriteInstruments.length === 0 && (
-              <option value="">No favourite instruments</option>
+            {chartInstruments.length === 0 && (
+              <option value="">No instruments available</option>
             )}
-            {favoriteInstruments.map((item) => (
+            {chartInstruments.map((item) => (
               <option key={item.symbol} value={item.symbol}>
                 {item.symbol}
               </option>
