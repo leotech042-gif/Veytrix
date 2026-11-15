@@ -106,7 +106,11 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }) {
       <aside className="sidebar">
         <Link className="brand" href="/" aria-label="Veytrix dashboard">
           <span className="brand-mark" aria-hidden="true">
-            V
+            <svg viewBox="0 0 32 32" role="img">
+              <path d="M5 21.5 11.2 8l4.1 9 4.2-9L27 21.5" />
+              <path d="M9 24h14" />
+              <circle cx="16" cy="5.5" r="1.5" />
+            </svg>
           </span>
           Veytrix
         </Link>
@@ -246,7 +250,11 @@ function DashboardFooter() {
       <div className="footer-brand">
         <Link className="brand" href="/">
           <span className="brand-mark" aria-hidden="true">
-            V
+            <svg viewBox="0 0 32 32" role="img">
+              <path d="M5 21.5 11.2 8l4.1 9 4.2-9L27 21.5" />
+              <path d="M9 24h14" />
+              <circle cx="16" cy="5.5" r="1.5" />
+            </svg>
           </span>
           Veytrix
         </Link>
