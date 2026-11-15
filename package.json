@@ -10,7 +10,8 @@
     "build": "corepack pnpm --filter @veytrix/shared build && corepack pnpm --filter @veytrix/api build && corepack pnpm --filter @veytrix/web build",
     "lint": "corepack pnpm --filter @veytrix/shared lint && corepack pnpm --filter @veytrix/api lint && corepack pnpm --filter @veytrix/web lint",
     "typecheck": "corepack pnpm --filter @veytrix/shared typecheck && corepack pnpm --filter @veytrix/api typecheck && corepack pnpm --filter @veytrix/web typecheck",
-    "mobile": "corepack pnpm --filter @veytrix/mobile start"
+    "mobile": "corepack pnpm --filter @veytrix/mobile start",
+    "mobile:web": "corepack pnpm --filter @veytrix/mobile web"
   },
   "devDependencies": {
     "typescript": "^5.8.0"

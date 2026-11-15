@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Pressable,
+  Platform,
   RefreshControl,
   ScrollView,
   StatusBar,
@@ -10,7 +11,7 @@ import {
   View,
 } from "react-native";
 
-const API = (process.env.EXPO_PUBLIC_API_URL ?? "http://10.0.2.2:4000/api").replace(/\/$/, "");
+const API = (process.env.EXPO_PUBLIC_API_URL ?? (Platform.OS === "web" ? "http://localhost:4000/api" : "http://10.0.2.2:4000/api")).replace(/\/$/, "");
 const C = {
   bg: "#080B09", panel: "#101612", panel2: "#0C110E", line: "#202B23",
   lime: "#B5FF55", text: "#F2F5F1", muted: "#829087", faint: "#59665D",
@@ -22,7 +23,18 @@ type Tab = "Terminal" | "Markets" | "Analysis" | "Fundamentals" | "Signals";
 type Quote = { instrument: string; asOf: string; bid?: number; ask?: number; last?: number; change?: number; changePercent?: number; delayed?: boolean };
 type Candle = { time: string; open: number; high: number; low: number; close: number; volume?: number };
 type Instrument = { symbol: string; displayName: string; category: string; pricePrecision?: number };
-type Event = { id: string; time: string; country: string; currency: string; event: string; impact: "high" | "medium" | "low" | "unknown"; actual: number | null; estimate: number | null; previous: number | null; unit?: string; currencyBias: string; affectedPairs: { symbol: string; bias: string }[] };
+type Event = { id: string; time: string; country: string; currency: string; event: string; impact: "high" | "medium" | "low" | "unknown"; actual: number | null; estimate: number | null; previous: number | null; unit?: string; surprise?: number | null; volatility?: string; analysis?: string; currencyBias: string; affectedPairs: { symbol: string; bias: string }[] };
+type FundamentalCategory = "ALL" | "JOBS" | "INFLATION" | "RATES" | "GDP" | "CENTRAL BANKS";
+const FUNDAMENTAL_CATEGORIES: FundamentalCategory[] = ["ALL", "JOBS", "INFLATION", "RATES", "GDP", "CENTRAL BANKS"];
+function fundamentalCategory(name: string): FundamentalCategory | "OTHER" {
+  const value = name.toLowerCase();
+  if (/fomc|federal reserve|ecb|boe|boj|central bank|monetary policy|rate decision|policy meeting/.test(value)) return "CENTRAL BANKS";
+  if (/nonfarm|payroll|employment|unemployment|jobless|initial claims|labour|labor market/.test(value)) return "JOBS";
+  if (/cpi|pce|inflation|consumer price|producer price|ppi|price index/.test(value)) return "INFLATION";
+  if (/interest rate|interest rates|rate statement|rate announcement|cash rate/.test(value)) return "RATES";
+  if (/gdp|gross domestic product|economic growth/.test(value)) return "GDP";
+  return "OTHER";
+}
 type Signal = { id: string; instrument: string; type: "setup" | "bias"; direction: string; confidence: number; timeframe: string; title: string; summary: string; createdAt: string; entry?: number; stopLoss?: number; takeProfit?: number; riskReward?: number; tags?: string[] };
 type ProviderStatus = { state: "connected" | "unconfigured" | "disconnected"; provider: string | null; message: string; updatedAt?: string; delayed?: boolean };
 
@@ -76,6 +88,7 @@ function CandleStick({ candle, min, max }: { candle: Candle; min: number; max: n
 
 export default function App() {
   const [tab, setTab] = useState<Tab>("Terminal");
+  const [fundamentalFilter, setFundamentalFilter] = useState<FundamentalCategory>("ALL");
   const [symbol, setSymbol] = useState("XAUUSD");
   const [timeframe, setTimeframe] = useState<Timeframe>("H1");
   const [quotes, setQuotes] = useState<Quote[]>([]);
@@ -200,20 +213,38 @@ export default function App() {
 
   const renderFundamentals = () => {
     const sorted = [...events].sort((a, b) => new Date(a.time).getTime() - new Date(b.time).getTime());
+    const visibleEvents = fundamentalFilter === "ALL" ? sorted : sorted.filter((event) => fundamentalCategory(event.event) === fundamentalFilter);
+    const biasByCurrency = sorted.reduce<Record<string, { score: number; weight: number; releases: number }>>((result, event) => {
+      if (!event.currency || !["bullish", "bearish", "neutral"].includes(event.currencyBias)) return result;
+      const weight = event.impact === "high" ? 3 : event.impact === "medium" ? 2 : 1;
+      const direction = event.currencyBias === "bullish" ? 1 : event.currencyBias === "bearish" ? -1 : 0;
+      const current = result[event.currency] ?? { score: 0, weight: 0, releases: 0 };
+      result[event.currency] = { score: current.score + direction * weight, weight: current.weight + weight, releases: current.releases + 1 };
+      return result;
+    }, {});
+    const currencyRows = Object.entries(biasByCurrency).sort((a, b) => (b[1].score / b[1].weight) - (a[1].score / a[1].weight));
     return <>
-      <PageHeading title="Fundamentals" subtitle="Economic calendar" status={fundStatus} />
+      <PageHeading title="Fundamentals" subtitle="Economic releases and market impact" status={fundStatus} />
       <View style={s.fundSummary}>
         <Panel style={s.fundStat}><Text style={s.fundNumber}>{events.filter((e) => e.impact === "high").length}</Text><Eyebrow>HIGH IMPACT</Eyebrow></Panel>
-        <Panel style={s.fundStat}><Text style={s.fundNumber}>{events.filter((e) => e.currency === "USD").length}</Text><Eyebrow>USD EVENTS</Eyebrow></Panel>
-        <Panel style={s.fundStat}><Text style={s.fundNumber}>{events.length}</Text><Eyebrow>ALL EVENTS</Eyebrow></Panel>
+        <Panel style={s.fundStat}><Text style={s.fundNumber}>{events.filter((e) => e.currency === "USD").length}</Text><Eyebrow>USD RELEASES</Eyebrow></Panel>
+        <Panel style={s.fundStat}><Text style={s.fundNumber}>{events.length}</Text><Eyebrow>RELEASES</Eyebrow></Panel>
       </View>
-      {sorted.length ? sorted.map((event) => <EventRow key={event.id} event={event} expanded />) : <Empty title="Calendar unavailable" detail={errors.fundamentals ?? fundStatus?.message ?? "Economic events will appear when the calendar provider is connected."} action="REFRESH" onAction={() => void refresh()} />}
-      <SectionTitle title="CURRENCY BIAS" />
-      {sorted.filter((event) => event.currencyBias && event.currencyBias !== "pending").slice(0, 6).map((event) => <Panel key={\`bias-\${event.id}\`} style={s.biasRow}><View style={{ flex: 1 }}><Text style={s.marketSymbol}>{event.currency}</Text><Text style={s.marketName} numberOfLines={1}>{event.event}</Text></View><Text style={[s.biasText, { color: directionColor(event.currencyBias) }]}>{event.currencyBias.toUpperCase()}</Text></Panel>)}
+      <SectionTitle title="ECONOMIC DATA" right={`${visibleEvents.length} RELEASES`} />
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.fundFilterRail}>
+        {FUNDAMENTAL_CATEGORIES.map((item) => <Pressable key={item} onPress={() => setFundamentalFilter(item)} style={[s.filterChip, fundamentalFilter === item && s.filterChipActive]}><Text style={[s.filterChipText, fundamentalFilter === item && s.filterChipTextActive]}>{item}</Text></Pressable>)}
+      </ScrollView>
+      {visibleEvents.length ? visibleEvents.map((event) => <EventRow key={event.id} event={event} expanded />) : <Empty title={sorted.length ? "No matching releases" : "Calendar unavailable"} detail={sorted.length ? "There are no returned events in this category for the current calendar range." : errors.fundamentals ?? fundStatus?.message ?? "Economic events will appear when the calendar provider is connected."} action="REFRESH" onAction={() => void refresh()} />}
+      <SectionTitle title="EVENT-BASED CURRENCY BIAS" />
+      {currencyRows.length ? currencyRows.map(([currency, data]) => {
+        const score = data.score / data.weight;
+        const bias = score > 0.15 ? "bullish" : score < -0.15 ? "bearish" : "neutral";
+        return <Panel key={currency} style={s.biasRow}><View style={{ flex: 1 }}><Text style={s.marketSymbol}>{currency}</Text><Text style={s.marketName}>{data.releases} priced releases · impact-weighted</Text></View><Text style={[s.biasText, { color: directionColor(bias) }]}>{bias.toUpperCase()}</Text></Panel>;
+      }) : <Text style={s.smallMuted}>Currency bias will appear after releases contain actual figures.</Text>}
     </>;
   };
 
-  const renderSignals = () => <>
+    const renderSignals = () => <>
     <PageHeading title="Signal Room" subtitle="Setups and directional bias" status={signalStatus} />
     {signals.length ? signals.map((item) => <SignalRow key={item.id} item={item} expanded />) : <Empty title="No active signals" detail={errors.signals ?? signalStatus?.message ?? "Signals will appear when the analysis engine returns results."} action="REFRESH" onAction={() => void refresh()} />}
   </>;
@@ -248,14 +279,15 @@ function Level({ label, value }: { label: string; value?: number }) {
 }
 function EventRow({ event, expanded }: { event: Event; expanded?: boolean }) {
   const impactColor = event.impact === "high" ? C.red : event.impact === "medium" ? C.amber : C.muted;
-  return <Panel style={s.eventCard}><View style={s.eventTop}><View style={{ flex: 1 }}><View style={s.eventMeta}><Text style={s.eventCurrency}>{event.currency}</Text><Text style={[s.impact, { color: impactColor }]}>{event.impact.toUpperCase()}</Text><Text style={s.eventTime}>{dateLabel(event.time)} · {clock(event.time)}</Text></View><Text style={s.eventName}>{event.event}</Text></View><Text style={[s.eventBias, { color: directionColor(event.currencyBias) }]}>{event.currencyBias === "pending" ? "—" : event.currencyBias.toUpperCase()}</Text></View><View style={s.eventNumbers}><EventNumber label="ACTUAL" value={event.actual} unit={event.unit} /><EventNumber label="FORECAST" value={event.estimate} unit={event.unit} /><EventNumber label="PREVIOUS" value={event.previous} unit={event.unit} /></View>{expanded && event.affectedPairs?.length ? <Text style={s.affectedPairs}>AFFECTED  {event.affectedPairs.slice(0, 5).map((pair) => \`\${pair.symbol} \${pair.bias}\`).join("   ·   ")}</Text> : null}</Panel>;
+  return <Panel style={s.eventCard}><View style={s.eventTop}><View style={{ flex: 1 }}><View style={s.eventMeta}><Text style={s.eventCurrency}>{event.currency}</Text><Text style={[s.impact, { color: impactColor }]}>{event.impact.toUpperCase()}</Text><Text style={s.eventTime}>{dateLabel(event.time)} · {clock(event.time)}</Text></View><Text style={s.eventName}>{event.event}</Text></View><Text style={[s.eventBias, { color: directionColor(event.currencyBias) }]}>{event.currencyBias === "pending" ? "—" : event.currencyBias.toUpperCase()}</Text></View><View style={s.eventNumbers}><EventNumber label="ACTUAL" value={event.actual} unit={event.unit} /><EventNumber label="FORECAST" value={event.estimate} unit={event.unit} /><EventNumber label="PREVIOUS" value={event.previous} unit={event.unit} /></View>{expanded && event.surprise !== null && event.surprise !== undefined ? <Text style={s.eventAnalysis}>SURPRISE  {event.surprise > 0 ? "+" : ""}{event.surprise}</Text> : null}{expanded && event.analysis ? <Text style={s.eventAnalysis}>{event.analysis}</Text> : null}{expanded && event.volatility ? <Text style={s.eventVolatility}>VOLATILITY  {event.volatility.replace(/_/g, " ").toUpperCase()}</Text> : null}{expanded && event.affectedPairs?.length ? <Text style={s.affectedPairs}>AFFECTED  {event.affectedPairs.slice(0, 5).map((pair) => `${pair.symbol} ${pair.bias}`).join("   ·   ")}</Text> : null}</Panel>;
 }
-function EventNumber({ label, value, unit }: { label: string; value: number | null; unit?: string }) {
+
+  function EventNumber({ label, value, unit }: { label: string; value: number | null; unit?: string }) {
   return <View style={s.eventNumber}><Eyebrow>{label}</Eyebrow><Text style={s.eventNumberValue}>{value === null ? "—" : \`\${value}\${unit ? \` \${unit}\` : ""}\`}</Text></View>;
 }
 
 const s = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: C.bg },
+  screen: { flex: 1, width: "100%", maxWidth: 560, alignSelf: "center", backgroundColor: C.bg },
   topBar: { paddingTop: 48, paddingHorizontal: 18, paddingBottom: 14, flexDirection: "row", alignItems: "center", justifyContent: "space-between", borderBottomWidth: 1, borderBottomColor: C.line },
   brandRow: { flexDirection: "row", alignItems: "center", gap: 10 },
   brandMark: { width: 34, height: 34, borderRadius: 10, backgroundColor: C.lime, alignItems: "center", justifyContent: "center" },
@@ -332,6 +364,11 @@ const s = StyleSheet.create({
   level: { flex: 1 },
   levelValue: { color: C.text, fontSize: 10, fontWeight: "700" },
   fundSummary: { flexDirection: "row", gap: 8, marginBottom: 8 },
+  fundFilterRail: { flexDirection: "row", gap: 7, paddingBottom: 12 },
+  filterChip: { borderWidth: 1, borderColor: C.line, backgroundColor: C.panel, borderRadius: 7, paddingHorizontal: 11, paddingVertical: 8 },
+  filterChipActive: { borderColor: "#719A49", backgroundColor: "#1A2918" },
+  filterChipText: { color: C.muted, fontSize: 8, fontWeight: "800" },
+  filterChipTextActive: { color: C.lime },
   fundStat: { flex: 1, alignItems: "center", paddingVertical: 12, marginBottom: 0 },
   fundNumber: { color: C.lime, fontSize: 20, fontWeight: "800", marginBottom: 4 },
   eventCard: { padding: 12 },
@@ -345,6 +382,8 @@ const s = StyleSheet.create({
   eventNumbers: { flexDirection: "row", justifyContent: "space-between", marginTop: 12, paddingTop: 10, borderTopWidth: 1, borderTopColor: C.line },
   eventNumber: { flex: 1 },
   eventNumberValue: { color: "#DCE4DC", fontSize: 10, fontWeight: "700" },
+  eventAnalysis: { color: "#B9C5BA", fontSize: 9, lineHeight: 15, marginTop: 10 },
+  eventVolatility: { color: C.amber, fontSize: 8, fontWeight: "800", marginTop: 8, letterSpacing: 0.5 },
   affectedPairs: { color: C.muted, fontSize: 8, marginTop: 10, lineHeight: 14 },
   biasRow: { flexDirection: "row", alignItems: "center" },
   biasText: { fontSize: 9, fontWeight: "900" },

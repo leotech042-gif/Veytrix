@@ -7,11 +7,20 @@ import { AppModule } from "./app.module";
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
-  const allowedOrigin = process.env.WEB_ORIGIN ?? "http://localhost:3000";
+  const allowedOrigins = (process.env.WEB_ORIGIN ?? "http://localhost:3000,http://localhost:8081,http://127.0.0.1:8081")
+    .split(",")
+    .map((origin) => origin.trim())
+    .filter(Boolean);
 
   app.use(helmet());
   app.enableCors({
-    origin: allowedOrigin,
+    origin: (origin, callback) => {
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+        return;
+      }
+      callback(new Error("Origin not allowed by CORS"));
+    },
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
   });
