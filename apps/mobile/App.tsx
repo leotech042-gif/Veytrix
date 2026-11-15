@@ -79,7 +79,7 @@ function CandleStick({ candle, min, max }: { candle: Candle; min: number; max: n
 export default function App() {
   const [tab, setTab] = useState<Tab>("Terminal");
   const [theme, setTheme] = useState<"dark" | "light">("dark");
-  const changeTheme = (value: "dark" | "light") => { C = value === "dark" ? DARK_C : LIGHT_C; setTheme(value); };
+  const changeTheme = (value: "dark" | "light") => { C = value === "dark" ? DARK_C : LIGHT_C; s = createStyles(); setTheme(value); };
   const [symbol, setSymbol] = useState("XAUUSD");
   const [timeframe, setTimeframe] = useState<Timeframe>("H1");
   const [quotes, setQuotes] = useState<Quote[]>([]);
@@ -290,7 +290,7 @@ function EventNumber({ label, value, unit }: { label: string; value: number | nu
   return <View style={s.eventNumber}><Eyebrow>{label}</Eyebrow><Text style={s.eventNumberValue}>{value === null ? "—" : `${value}${unit ? ` ${unit}` : ""}`}</Text></View>;
 }
 
-const s = StyleSheet.create({
+const createStyles = () => StyleSheet.create({
   screen: { flex: 1, backgroundColor: C.bg },
   topBar: { paddingTop: 48, paddingHorizontal: 18, paddingBottom: 14, flexDirection: "row", alignItems: "center", justifyContent: "space-between", borderBottomWidth: 1, borderBottomColor: C.line },
   brandRow: { flexDirection: "row", alignItems: "center", gap: 10 },
@@ -398,3 +398,5 @@ const s = StyleSheet.create({
   navLabelActive: { color: C.lime, fontWeight: "900" },
   navIndicator: { width: 15, height: 2, borderRadius: 2, backgroundColor: C.lime },
 });
+
+let s = createStyles();
