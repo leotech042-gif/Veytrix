@@ -34,7 +34,7 @@ const defaults: UserPreferences = {
   chartBackground: "#0e141d",
   bullishColor: "#8bd878",
   bearishColor: "#ed7777",
-  accentColor: "#72d6ce",
+  accentColor: "#c6f36b",
   defaultInstrument: "EURUSD",
   showSma: false,
   showEma: false,
@@ -86,7 +86,7 @@ function parsePreferences(stored: string | null): UserPreferences {
       ),
       bullishColor: color(candidate.bullishColor, defaults.bullishColor),
       bearishColor: color(candidate.bearishColor, defaults.bearishColor),
-      accentColor: color(candidate.accentColor === "#c6f36b" ? undefined : candidate.accentColor, defaults.accentColor),
+      accentColor: color(candidate.accentColor, defaults.accentColor),
       defaultInstrument:
         typeof candidate.defaultInstrument === "string" &&
         candidate.defaultInstrument.trim().length > 0 &&

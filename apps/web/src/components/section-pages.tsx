@@ -1170,94 +1170,165 @@ function SettingsPage() {
   return (
     <>
       <PageHeading
-        eyebrow="PERSONAL WORKSPACE"
+        eyebrow="WORKSPACE PREFERENCES"
         title="Settings"
-        description="Shape your Veytrix workspace. Your preferences are saved locally on this device."
+        description="Personalize this browser's workspace. Secrets and broker credentials are never saved here."
       />
-      <div className="settings-summary">
-        <div className="settings-summary-icon" aria-hidden="true">✳</div>
-        <div>
-          <strong>Your workspace, your rules.</strong>
-          <p>Control appearance, chart behaviour and the connections available to this workspace.</p>
-        </div>
-        <span className="settings-saved"><span /> Saved on this device</span>
-      </div>
-
-      <div className="settings-grid professional-settings">
+      <div className="settings-grid">
         <section className="panel settings-panel">
-          <div className="settings-panel-heading">
-            <span className="settings-icon">◐</span>
-            <div><h2>Appearance</h2><p className="panel-description">Make the interface comfortable for your workflow.</p></div>
-          </div>
+          <h2>Appearance</h2>
+          <p className="panel-description">
+            Choose a theme or follow your operating system.
+          </p>
           <div className="setting-control">
-            <span className="setting-label">Interface theme</span>
-            <div className="segmented-control" role="group" aria-label="Color theme">
-              {(["light", "dark", "system"] as ThemePreference[]).map((theme) => (
-                <button
-                  type="button"
-                  key={theme}
-                  className={(hydrated ? preferences.theme : "system") === theme ? "selected" : ""}
-                  aria-pressed={(hydrated ? preferences.theme : "system") === theme}
-                  onClick={() => updatePreferences({ theme })}
-                >
-                  {theme === "system" ? "Auto" : theme[0].toLocaleUpperCase() + theme.slice(1)}
-                </button>
-              ))}
+            <span className="setting-label">Color theme</span>
+            <div
+              className="segmented-control"
+              role="group"
+              aria-label="Color theme"
+            >
+              {(["light", "dark", "system"] as ThemePreference[]).map(
+                (theme) => (
+                  <button
+                    type="button"
+                    key={theme}
+                    className={
+                      (hydrated ? preferences.theme : "system") === theme
+                        ? "selected"
+                        : ""
+                    }
+                    aria-pressed={
+                      (hydrated ? preferences.theme : "system") === theme
+                    }
+                    onClick={() => updatePreferences({ theme })}
+                  >
+                    {theme[0].toLocaleUpperCase() + theme.slice(1)}
+                  </button>
+                ),
+              )}
             </div>
           </div>
-          <ColorSetting label="Accent colour" value={hydrated ? preferences.accentColor : "#72d6ce"} onChange={(accentColor) => updatePreferences({ accentColor })} />
-          <div className="settings-color-grid">
-            <ColorSetting label="Chart background" value={hydrated ? preferences.chartBackground : "#101a20"} onChange={(chartBackground) => updatePreferences({ chartBackground })} />
-            <ColorSetting label="Bullish candle" value={hydrated ? preferences.bullishColor : "#42b99b"} onChange={(bullishColor) => updatePreferences({ bullishColor })} />
-            <ColorSetting label="Bearish candle" value={hydrated ? preferences.bearishColor : "#e47778"} onChange={(bearishColor) => updatePreferences({ bearishColor })} />
-          </div>
+          <ColorSetting
+            label="Accent color"
+            value={hydrated ? preferences.accentColor : "#c6f36b"}
+            onChange={(accentColor) => updatePreferences({ accentColor })}
+          />
+          <ColorSetting
+            label="Chart background"
+            value={hydrated ? preferences.chartBackground : "#0e141d"}
+            onChange={(chartBackground) =>
+              updatePreferences({ chartBackground })
+            }
+          />
+          <ColorSetting
+            label="Bullish candle"
+            value={hydrated ? preferences.bullishColor : "#8bd878"}
+            onChange={(bullishColor) => updatePreferences({ bullishColor })}
+          />
+          <ColorSetting
+            label="Bearish candle"
+            value={hydrated ? preferences.bearishColor : "#ed7777"}
+            onChange={(bearishColor) => updatePreferences({ bearishColor })}
+          />
         </section>
 
         <section className="panel settings-panel">
-          <div className="settings-panel-heading">
-            <span className="settings-icon">⌁</span>
-            <div><h2>Chart preferences</h2><p className="panel-description">Set the defaults used when opening a chart.</p></div>
-          </div>
+          <h2>Chart defaults</h2>
+          <p className="panel-description">
+            Saved locally in this browser and applied to the chart.
+          </p>
           <label className="setting-control">
             <span className="setting-label">Default timeframe</span>
-            <select value={hydrated ? preferences.defaultTimeframe : "H1"} onChange={(event) => updatePreferences({ defaultTimeframe: event.target.value as typeof preferences.defaultTimeframe })}>
-              {["M1", "M5", "M15", "M30", "H1", "H4", "D1", "W1"].map((timeframe) => <option value={timeframe} key={timeframe}>{timeframe}</option>)}
+            <select
+              value={hydrated ? preferences.defaultTimeframe : "H1"}
+              onChange={(event) =>
+                updatePreferences({
+                  defaultTimeframe: event.target
+                    .value as typeof preferences.defaultTimeframe,
+                })
+              }
+            >
+              {["M1", "M5", "M15", "M30", "H1", "H4", "D1", "W1"].map(
+                (timeframe) => (
+                  <option value={timeframe} key={timeframe}>
+                    {timeframe}
+                  </option>
+                ),
+              )}
             </select>
           </label>
           <label className="setting-control">
             <span className="setting-label">Default instrument</span>
-            <select value={hydrated ? preferences.defaultInstrument : ""} onChange={(event) => updatePreferences({ defaultInstrument: event.target.value })} disabled={feed.instruments.length === 0}>
-              <option value="">{feed.instruments.length ? "Choose an instrument" : "No supported instruments available"}</option>
-              {feed.instruments.map((instrument) => <option value={instrument.symbol} key={instrument.symbol}>{instrument.symbol} · {instrument.displayName}</option>)}
+            <select
+              value={hydrated ? preferences.defaultInstrument : ""}
+              onChange={(event) =>
+                updatePreferences({ defaultInstrument: event.target.value })
+              }
+              disabled={feed.instruments.length === 0}
+            >
+              <option value="">
+                {feed.instruments.length
+                  ? "Choose an instrument"
+                  : "No supported instruments available"}
+              </option>
+              {feed.instruments.map((instrument) => (
+                <option value={instrument.symbol} key={instrument.symbol}>
+                  {instrument.symbol} · {instrument.displayName}
+                </option>
+              ))}
             </select>
           </label>
           <div className="settings-inline-status">
-            <span className="settings-status-dot" />
-            {feed.status?.state === "connected" ? `Provider: ${feed.status.provider}` : (feed.error ?? "No market-data provider is connected.")}
+            {feed.status?.state === "connected"
+              ? `Provider: ${feed.status.provider}`
+              : (feed.error ?? "No provider is connected.")}
           </div>
         </section>
 
         <section className="panel settings-panel">
-          <div className="settings-panel-heading">
-            <span className="settings-icon">◇</span>
-            <div><h2>Connections & security</h2><p className="panel-description">Manage how external services connect to Veytrix.</p></div>
-          </div>
+          <h2>Account and provider</h2>
+          <p className="panel-description">
+            Authentication and broker connections have not been implemented.
+          </p>
           <div className="integration-callout">
-            <strong>Protect your provider credentials</strong>
-            <p>Authentication and broker connections are not yet implemented. Configure provider secrets in the API environment only. Never place broker credentials in this page or browser storage.</p>
+            <strong>Keep provider secrets server-side</strong>
+            <p>
+              Select a licensed provider and configure its credentials in the
+              API&apos;s local environment. Do not enter credentials in this
+              page or browser storage. A provider connection test will be
+              available only when a compatible adapter supports it.
+            </p>
           </div>
-          <p className="settings-inline-status">Account profile, broker sign-in, alerts and notifications will appear when their secure integrations are available.</p>
+          <p className="settings-inline-status">
+            Account profile, sign-out, price alerts, and notification settings
+            require additional integrations.
+          </p>
         </section>
 
         <section className="panel settings-panel">
-          <div className="settings-panel-heading">
-            <span className="settings-icon">↗</span>
-            <div><h2>Official channels</h2><p className="panel-description">Find Veytrix on its configured public platforms.</p></div>
-          </div>
+          <h2>Official social profiles</h2>
+          <p className="panel-description">
+            Only project-configured official URLs are displayed. Update public
+            URL variables in the web app environment to change these links.
+          </p>
           <div className="configured-social-links">
-            {getOfficialSocialLinks().length > 0 ? getOfficialSocialLinks().map((link) => (
-              <a className="secondary-button" href={link.url} key={link.label} target="_blank" rel="noopener noreferrer">{link.label}<span aria-hidden="true">↗</span></a>
-            )) : <span className="settings-inline-status">No official social URLs are configured yet.</span>}
+            {getOfficialSocialLinks().length > 0 ? (
+              getOfficialSocialLinks().map((link) => (
+                <a
+                  className="secondary-button"
+                  href={link.url}
+                  key={link.label}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  {link.label}
+                </a>
+              ))
+            ) : (
+              <span className="settings-inline-status">
+                No official social URLs are configured.
+              </span>
+            )}
           </div>
         </section>
       </div>

@@ -69,7 +69,6 @@ function connectionLabel(state: StatusState): string {
 export function WorkspaceShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const [openMenuPath, setOpenMenuPath] = useState<string | null>(null);
-  const [moreOpen, setMoreOpen] = useState(false);
   const connection = useMarketConnection();
   const hydrated = useHydrated();
   const mobileMenuOpen = openMenuPath === pathname;
@@ -77,30 +76,19 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }) {
     ? connection
     : { kind: "checking" };
 
-  const isActive = (href: string) =>
-    href === "/" ? pathname === "/" : pathname.startsWith(href);
-
-  const primaryNavigation = navigation.filter((item) =>
-    ["/", "/markets", "/terminal", "/charts", "/signals", "/fundamentals"].includes(item.href),
-  );
-  const secondaryNavigation = navigation.filter((item) =>
-    ["/history", "/assistant", "/settings", "/faq"].includes(item.href),
-  );
-
   const navigationLinks = navigation.map((item) => {
-    const active = isActive(item.href);
+    const active =
+      item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
     return (
       <Link
         className={`nav-item${active ? " active" : ""}`}
         href={item.href}
         aria-current={active ? "page" : undefined}
         key={item.href}
-        onClick={() => {
-          setOpenMenuPath(null);
-          setMoreOpen(false);
-        }}
       >
-        <span className="nav-icon" aria-hidden="true">{item.icon}</span>
+        <span className="nav-icon" aria-hidden="true">
+          {item.icon}
+        </span>
         {item.label}
       </Link>
     );
@@ -115,83 +103,109 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="app-shell">
+      <aside className="sidebar">
+        <Link className="brand" href="/" aria-label="Veytrix dashboard">
+          <span className="brand-mark" aria-hidden="true">
+            V
+          </span>
+          Veytrix
+        </Link>
+
+        <nav className="desktop-nav" aria-label="Main navigation">
+          <p className="nav-label">Workspace</p>
+          <div className="nav-list">{navigationLinks}</div>
+        </nav>
+
+        <div className="sidebar-bottom">
+          <div className="connection-card">
+            <div className="connection-title" aria-live="polite">
+              <span
+                className={`state-dot${visibleConnection.kind === "ready" && visibleConnection.status.state === "connected" && !visibleConnection.status.delayed ? " connected" : ""}`}
+              />
+              {connectionLabel(visibleConnection)}
+            </div>
+            <p className="connection-copy">{marketStatusCopy}</p>
+          </div>
+          <Link className="user-chip" href="/settings">
+            <span className="avatar" aria-hidden="true">
+              VX
+            </span>
+            <span>
+              <span className="user-name">Local workspace</span>
+              <span className="user-tier">Profile not connected</span>
+            </span>
+          </Link>
+        </div>
+      </aside>
+
       <div className="workspace-main">
         <header className="topbar">
-          <Link className="brand" href="/" aria-label="Veytrix dashboard">
-            <span className="brand-mark" aria-hidden="true">
-              <svg viewBox="0 0 34 34" role="img" focusable="false">
-                <path d="M5 23.5 12.2 10l5.1 9.1L22 10l7 13.5" />
-                <path d="M10 27h14" />
-              </svg>
+          <button
+            className="mobile-menu-button"
+            type="button"
+            aria-expanded={mobileMenuOpen}
+            aria-controls="mobile-navigation"
+            onClick={() =>
+              setOpenMenuPath((openPath) =>
+                openPath === pathname ? null : pathname,
+              )
+            }
+          >
+            <span aria-hidden="true">{mobileMenuOpen ? "×" : "☰"}</span>
+            <span className="visually-hidden">
+              {mobileMenuOpen ? "Close navigation" : "Open navigation"}
             </span>
-            <span className="brand-word">veytrix<span>®</span></span>
-          </Link>
-
-          <nav className="top-navigation" aria-label="Main navigation">
-            {primaryNavigation.map((item) => {
-              const active = isActive(item.href);
-              return (
-                <Link
-                  className={`top-nav-item${active ? " active" : ""}`}
-                  href={item.href}
-                  aria-current={active ? "page" : undefined}
-                  key={item.href}
-                >
-                  {item.label === "Trading Terminal" ? "Terminal" : item.label === "Fundamental Analysis" ? "Fundamentals" : item.label === "Signal Room" ? "Signals" : item.label}
-                </Link>
-              );
-            })}
-            <div className="top-nav-more">
-              <button
-                className={`top-nav-item more-trigger${secondaryNavigation.some((item) => isActive(item.href)) ? " active" : ""}`}
-                type="button"
-                aria-expanded={moreOpen}
-                onClick={() => setMoreOpen((value) => !value)}
-              >
-                More <span aria-hidden="true">⌄</span>
-              </button>
-              {moreOpen && (
-                <div className="top-nav-menu">
-                  {secondaryNavigation.map((item) => (
-                    <Link
-                      href={item.href}
-                      key={item.href}
-                      className={`top-nav-menu-item${isActive(item.href) ? " active" : ""}`}
-                      onClick={() => setMoreOpen(false)}
-                    >
-                      <span aria-hidden="true">{item.icon}</span>{item.label}
-                    </Link>
-                  ))}
-                </div>
-              )}
-            </div>
-          </nav>
-
+          </button>
+          <div className="breadcrumb">
+            Workspace <span aria-hidden="true">/</span>{" "}
+            {navigation.find((item) =>
+              item.href === "/" ? pathname === "/" : item.href === pathname,
+            )?.label ?? "Veytrix"}
+          </div>
           <div className="top-actions">
-            <span className="market-state" aria-live="polite" title={marketStatusCopy}>
-              <span className={`state-dot${visibleConnection.kind === "ready" && visibleConnection.status.state === "connected" && !visibleConnection.status.delayed ? " connected" : ""}`} />
-              <span>{connectionLabel(visibleConnection)}</span>
+            <span className="market-state" aria-live="polite">
+              <span
+                className={`state-dot${visibleConnection.kind === "ready" && visibleConnection.status.state === "connected" && !visibleConnection.status.delayed ? " connected" : ""}`}
+              />
+              {connectionLabel(visibleConnection)}
             </span>
             <ThemeToggle />
-            <Link className="icon-button profile-button" href="/settings" aria-label="Profile and settings" title="Profile and settings">
+            <Link
+              className="icon-button profile-button"
+              href="/settings"
+              aria-label="Profile and settings"
+              title="Profile and settings"
+            >
               VX
             </Link>
           </div>
         </header>
 
         {mobileMenuOpen && (
-          <nav className="mobile-navigation" id="mobile-navigation" aria-label="Mobile navigation">
+          <nav
+            className="mobile-navigation"
+            id="mobile-navigation"
+            aria-label="Mobile navigation"
+          >
             {navigationLinks}
           </nav>
         )}
 
         <main className="main-area">{children}</main>
 
-        <nav className="mobile-bottom-nav" aria-label="Mobile primary navigation">
+        <nav
+          className="mobile-bottom-nav"
+          aria-label="Mobile primary navigation"
+        >
           {navigation
-            .filter((item) => ["/", "/markets", "/terminal", "/charts"].includes(item.href))
+            .filter((item) =>
+              ["/", "/markets", "/terminal", "/charts"].includes(item.href),
+            )
             .map((item) => {
-              const active = isActive(item.href);
+              const active =
+                item.href === "/"
+                  ? pathname === "/"
+                  : pathname.startsWith(item.href);
               return (
                 <Link
                   className={`mobile-bottom-item${active ? " active" : ""}`}
@@ -209,7 +223,11 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }) {
             type="button"
             aria-expanded={mobileMenuOpen}
             aria-controls="mobile-navigation"
-            onClick={() => setOpenMenuPath((openPath) => openPath === pathname ? null : pathname)}
+            onClick={() =>
+              setOpenMenuPath((openPath) =>
+                openPath === pathname ? null : pathname,
+              )
+            }
           >
             <span aria-hidden="true">•••</span>
             More
