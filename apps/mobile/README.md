@@ -19,5 +19,6 @@ Android-first React Native app built with Expo, with iOS support.
 - Analysis: directional signals returned by the existing Veytrix signal engine.
 - Fundamentals: economic calendar, actual/forecast/previous values, impact, currency bias and affected pairs.
 - Signal Room: returned setups and directional bias.
+- Settings: device theme selection, market-provider status, and workspace preferences.
 
 The app uses the existing API routes. It does not generate sample prices, fabricate events, or invent signals. Missing provider data is shown as an honest empty state. Order execution remains disabled until secure broker authentication and execution are implemented.
