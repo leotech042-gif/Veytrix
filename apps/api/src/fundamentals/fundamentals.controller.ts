@@ -17,4 +17,9 @@ export class FundamentalsController {
   getCalendar(@Query("from") from?: string, @Query("to") to?: string) {
     return this.fundamentals.getCalendar(from, to);
   }
+
+  @Get("news")
+  getNews() {
+    return this.fundamentals.getNews();
+  }
 }

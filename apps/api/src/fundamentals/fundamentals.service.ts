@@ -1,5 +1,5 @@
 import { Inject, Injectable } from "@nestjs/common";
-import type { EconomicEvent, FundamentalsStatus } from "@veytrix/shared";
+import type { EconomicEvent, FundamentalNewsItem, FundamentalsStatus } from "@veytrix/shared";
 import {
   FUNDAMENTALS_PROVIDER,
   type FundamentalsProvider,
@@ -18,5 +18,9 @@ export class FundamentalsService {
 
   getCalendar(from?: string, to?: string): Promise<readonly EconomicEvent[]> {
     return this.provider.getCalendar(from, to);
+  }
+
+  getNews(): Promise<readonly FundamentalNewsItem[]> {
+    return this.provider.getNews();
   }
 }

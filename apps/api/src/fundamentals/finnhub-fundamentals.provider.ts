@@ -1,6 +1,7 @@
 import { Injectable, Logger } from "@nestjs/common";
 import type {
   EconomicEvent,
+  FundamentalNewsItem,
   EconomicImpact,
   FundDirection,
   FundamentalsStatus,
@@ -35,7 +36,9 @@ export class FinnhubFundamentalsProvider implements FundamentalsProvider {
   private readonly apiKey = process.env.FINNHUB_API_KEY?.trim();
   private readonly baseUrl = "https://finnhub.io/api/v1";
   private cache: { at: number; events: EconomicEvent[] } | null = null;
+  private newsCache: { at: number; items: FundamentalNewsItem[] } | null = null;
   private readonly cacheMs = 20 * 60_000;
+  private readonly newsCacheMs = 5 * 60_000;
 
   getStatus(): FundamentalsStatus {
     if (!this.apiKey) {
@@ -49,7 +52,7 @@ export class FinnhubFundamentalsProvider implements FundamentalsProvider {
     return {
       state: "connected",
       provider: "Finnhub Economic Calendar",
-      message: "Live calendar · actual / forecast / previous · pair bias",
+      message: "Economic calendar · release analysis · market news",
       updatedAt: new Date().toISOString(),
     };
   }
@@ -101,6 +104,42 @@ export class FinnhubFundamentalsProvider implements FundamentalsProvider {
         err instanceof Error ? err.message : err,
       );
       return this.cache?.events ?? [];
+    }
+  }
+
+  async getNews(): Promise<readonly FundamentalNewsItem[]> {
+    if (!this.apiKey) return [];
+    if (this.newsCache && Date.now() - this.newsCache.at < this.newsCacheMs) return this.newsCache.items;
+    try {
+      const response = await fetch(`${this.baseUrl}/news?category=general&token=${this.apiKey}`);
+      if (!response.ok) {
+        this.logger.warn(`Finnhub news HTTP ${response.status}`);
+        return this.newsCache?.items ?? [];
+      }
+      const body: unknown = await response.json();
+      const rows = Array.isArray(body) ? body as Array<Record<string, unknown>> : [];
+      const items = rows.map((row, index): FundamentalNewsItem | null => {
+        const headline = typeof row.headline === "string" ? row.headline.trim() : "";
+        const url = typeof row.url === "string" ? row.url : "";
+        if (!headline || !url) return null;
+        const timestamp = typeof row.datetime === "number" ? row.datetime : 0;
+        return {
+          id: String(row.id ?? `${timestamp}-${index}`),
+          headline,
+          summary: typeof row.summary === "string" ? row.summary : "",
+          source: typeof row.source === "string" ? row.source : "Finnhub",
+          url,
+          publishedAt: timestamp > 0 ? new Date(timestamp * 1000).toISOString() : new Date().toISOString(),
+          category: typeof row.category === "string" ? row.category : "general",
+          related: typeof row.related === "string" ? row.related.split(",").map((item) => item.trim()).filter(Boolean) : [],
+        };
+      }).filter((item): item is FundamentalNewsItem => item !== null)
+        .sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime());
+      this.newsCache = { at: Date.now(), items };
+      return items;
+    } catch (error) {
+      this.logger.warn("Finnhub news failed", error instanceof Error ? error.message : error);
+      return this.newsCache?.items ?? [];
     }
   }
 
