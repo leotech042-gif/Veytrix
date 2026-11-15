@@ -92,7 +92,6 @@ export function TradingChart({
   compact?: boolean;
 }) {
   const panelRef = useRef<HTMLElement>(null);
-  const widgetRef = useRef<HTMLDivElement>(null);
   const [selectedInstrument, setSelectedInstrument] =
     useState(initialInstrument);
   const [selectedTimeframe, setSelectedTimeframe] =
@@ -148,85 +147,41 @@ export function TradingChart({
     widgetLoadResult?.key === widgetKey
       ? (widgetLoadResult.error ?? null)
       : null;
-  useEffect(() => {
-    const widget = widgetRef.current;
-    if (!widget || !symbol) return;
-
-    let active = true;
-    const embedContainer = document.createElement("div");
-    embedContainer.className = "tradingview-widget-generation";
-    embedContainer.style.width = "100%";
-    embedContainer.style.height = "100%";
-    widget.replaceChildren(embedContainer);
-
-    const studies = [
-      ...(showSma ? ["MASimple@tv-basicstudies"] : []),
-      ...(showEma ? ["MAExp@tv-basicstudies"] : []),
-      ...(showVolume ? ["Volume@tv-basicstudies"] : []),
-    ];
-    const script = document.createElement("script");
-    script.type = "text/javascript";
-    script.async = true;
-    script.src =
-      "https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js";
-    script.textContent = JSON.stringify({
-      autosize: true,
+  const widgetUrl = (() => {
+    const params = new URLSearchParams({
       symbol,
       interval: tradingViewIntervals[timeframe],
       timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
       theme: resolvedTheme,
       style: "1",
       locale: "en",
-      allow_symbol_change: false,
-      hide_side_toolbar: false,
-      withdateranges: true,
-      details: false,
-      hotlist: false,
-      calendar: false,
-      save_image: false,
-      backgroundColor: chartBackground,
-      gridColor,
-      studies,
-      overrides: {
-        "mainSeriesProperties.candleStyle.upColor": preferences.bullishColor,
-        "mainSeriesProperties.candleStyle.downColor": preferences.bearishColor,
-        "mainSeriesProperties.candleStyle.wickUpColor": preferences.bullishColor,
-        "mainSeriesProperties.candleStyle.wickDownColor": preferences.bearishColor,
-        "mainSeriesProperties.candleStyle.borderUpColor": preferences.bullishColor,
-        "mainSeriesProperties.candleStyle.borderDownColor": preferences.bearishColor,
-      },
-      support_host: "https://www.tradingview.com",
+      hide_top_toolbar: "false",
+      hide_side_toolbar: "false",
+      allow_symbol_change: "false",
+      save_image: "false",
+      withdateranges: "true",
+      details: "false",
+      hotlist: "false",
+      calendar: "false",
+      toolbarbg: chartBackground.replace("#", ""),
+      hideideas: "1",
     });
-    script.onload = () => {
-      if (active) setWidgetLoadResult({ key: widgetKey });
-    };
-    script.onerror = () => {
-      if (active) {
-        setWidgetLoadResult({
-          key: widgetKey,
-          error: "The Veytrix chart could not be loaded.",
-        });
-      }
-    };
-    embedContainer.appendChild(script);
-
-    return () => {
-      active = false;
-      embedContainer.remove();
-    };
-  }, [
-    chartBackground,
-    gridColor,
-    preferences.bearishColor,
-    preferences.bullishColor,
-    showEma,
-    showSma,
-    showVolume,
-    symbol,
-    timeframe,
-    resolvedTheme,
-    widgetKey,
-  ]);
+    const studies = [
+      ...(showSma ? ["MASimple@tv-basicstudies"] : []),
+      ...(showEma ? ["MAExp@tv-basicstudies"] : []),
+      ...(showVolume ? ["Volume@tv-basicstudies"] : []),
+    ];
+    if (studies.length) params.set("studies", studies.join(";"));
+    params.set("overrides", JSON.stringify({
+      "mainSeriesProperties.candleStyle.upColor": preferences.bullishColor,
+      "mainSeriesProperties.candleStyle.downColor": preferences.bearishColor,
+      "mainSeriesProperties.candleStyle.wickUpColor": preferences.bullishColor,
+      "mainSeriesProperties.candleStyle.wickDownColor": preferences.bearishColor,
+      "mainSeriesProperties.candleStyle.borderUpColor": preferences.bullishColor,
+      "mainSeriesProperties.candleStyle.borderDownColor": preferences.bearishColor,
+    }));
+    return `https://www.tradingview.com/widgetembed/?${params.toString()}`;
+  })();
 
   useEffect(() => {
     const syncFullScreen = () => {
@@ -351,10 +306,24 @@ export function TradingChart({
           className="chart-canvas"
           aria-label="Veytrix interactive chart"
         >
-          <div
-            className="tradingview-widget-container__widget"
-            ref={widgetRef}
-          />
+          {symbol && (
+            <iframe
+              key={widgetKey}
+              title={`TradingView chart for ${instrument?.symbol ?? "selected market"}`}
+              src={widgetUrl}
+              className="tradingview-chart-frame"
+              onLoad={() => setWidgetLoadResult({ key: widgetKey })}
+              onError={() =>
+                setWidgetLoadResult({
+                  key: widgetKey,
+                  error: "TradingView could not load this market chart.",
+                })
+              }
+              allow="clipboard-write; fullscreen"
+              allowFullScreen
+              loading="eager"
+            />
+          )}
         </div>
         {(loading || error || !symbol) && (
           <div className="chart-overlay" role={error ? "alert" : "status"}>
