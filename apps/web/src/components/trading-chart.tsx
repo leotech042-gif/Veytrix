@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import type { ChartTimeframe, MarketInstrument } from "@veytrix/shared";
 import { useHydrated, usePreferences } from "./theme-provider";
+import { useMarketFavorites } from "./market-watch";
 
 const timeframes: ChartTimeframe[] = [
   "M1",
@@ -92,6 +93,7 @@ export function TradingChart({
   compact?: boolean;
 }) {
   const panelRef = useRef<HTMLElement>(null);
+  const widgetRef = useRef<HTMLDivElement>(null);
   const [selectedInstrument, setSelectedInstrument] =
     useState(initialInstrument);
   const [selectedTimeframe, setSelectedTimeframe] =
@@ -103,21 +105,26 @@ export function TradingChart({
 
   const hydrated = useHydrated();
   const { preferences, updatePreferences } = usePreferences();
+  const { favorites } = useMarketFavorites();
   const resolvedTheme = useSyncExternalStore(
     subscribeToResolvedTheme,
     getResolvedTheme,
     getServerTheme,
   );
 
-  // Charts must work for every provider-supported instrument, not only favourites.
-  const activeInstrument = instruments.some(
-    (item) => item.symbol === selectedInstrument,
+  const favoriteInstruments = instruments.filter((instrument) =>
+    favorites.includes(instrument.symbol),
+  );
+  const activeInstrument = favoriteInstruments.some(
+    (instrument) => instrument.symbol === selectedInstrument,
   )
     ? selectedInstrument
-    : instruments.some((item) => item.symbol === initialInstrument)
+    : favoriteInstruments.some(
+          (instrument) => instrument.symbol === initialInstrument,
+        )
       ? initialInstrument
-      : (instruments[0]?.symbol ?? "");
-  const instrument = instruments.find(
+      : (favoriteInstruments[0]?.symbol ?? "");
+  const instrument = favoriteInstruments.find(
     (item) => item.symbol === activeInstrument,
   );
   const symbol = toTradingViewSymbol(instrument);
@@ -147,41 +154,85 @@ export function TradingChart({
     widgetLoadResult?.key === widgetKey
       ? (widgetLoadResult.error ?? null)
       : null;
-  const widgetUrl = (() => {
-    const params = new URLSearchParams({
+  useEffect(() => {
+    const widget = widgetRef.current;
+    if (!widget || !symbol) return;
+
+    let active = true;
+    const embedContainer = document.createElement("div");
+    embedContainer.className = "tradingview-widget-generation";
+    embedContainer.style.width = "100%";
+    embedContainer.style.height = "100%";
+    widget.replaceChildren(embedContainer);
+
+    const studies = [
+      ...(showSma ? ["MASimple@tv-basicstudies"] : []),
+      ...(showEma ? ["MAExp@tv-basicstudies"] : []),
+      ...(showVolume ? ["Volume@tv-basicstudies"] : []),
+    ];
+    const script = document.createElement("script");
+    script.type = "text/javascript";
+    script.async = true;
+    script.src =
+      "https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js";
+    script.textContent = JSON.stringify({
+      autosize: true,
       symbol,
       interval: tradingViewIntervals[timeframe],
       timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
       theme: resolvedTheme,
       style: "1",
       locale: "en",
-      hide_top_toolbar: "false",
-      hide_side_toolbar: "false",
-      allow_symbol_change: "false",
-      save_image: "false",
-      withdateranges: "true",
-      details: "false",
-      hotlist: "false",
-      calendar: "false",
-      toolbarbg: chartBackground.replace("#", ""),
-      hideideas: "1",
+      allow_symbol_change: false,
+      hide_side_toolbar: false,
+      withdateranges: true,
+      details: false,
+      hotlist: false,
+      calendar: false,
+      save_image: false,
+      backgroundColor: chartBackground,
+      gridColor,
+      studies,
+      overrides: {
+        "mainSeriesProperties.candleStyle.upColor": preferences.bullishColor,
+        "mainSeriesProperties.candleStyle.downColor": preferences.bearishColor,
+        "mainSeriesProperties.candleStyle.wickUpColor": preferences.bullishColor,
+        "mainSeriesProperties.candleStyle.wickDownColor": preferences.bearishColor,
+        "mainSeriesProperties.candleStyle.borderUpColor": preferences.bullishColor,
+        "mainSeriesProperties.candleStyle.borderDownColor": preferences.bearishColor,
+      },
+      support_host: "https://www.tradingview.com",
     });
-    const studies = [
-      ...(showSma ? ["MASimple@tv-basicstudies"] : []),
-      ...(showEma ? ["MAExp@tv-basicstudies"] : []),
-      ...(showVolume ? ["Volume@tv-basicstudies"] : []),
-    ];
-    if (studies.length) params.set("studies", studies.join(";"));
-    params.set("overrides", JSON.stringify({
-      "mainSeriesProperties.candleStyle.upColor": preferences.bullishColor,
-      "mainSeriesProperties.candleStyle.downColor": preferences.bearishColor,
-      "mainSeriesProperties.candleStyle.wickUpColor": preferences.bullishColor,
-      "mainSeriesProperties.candleStyle.wickDownColor": preferences.bearishColor,
-      "mainSeriesProperties.candleStyle.borderUpColor": preferences.bullishColor,
-      "mainSeriesProperties.candleStyle.borderDownColor": preferences.bearishColor,
-    }));
-    return `https://www.tradingview.com/widgetembed/?${params.toString()}`;
-  })();
+    script.onload = () => {
+      if (active) setWidgetLoadResult({ key: widgetKey });
+    };
+    script.onerror = () => {
+      if (active) {
+        setWidgetLoadResult({
+          key: widgetKey,
+          error: "The Veytrix chart could not be loaded.",
+        });
+      }
+    };
+    embedContainer.appendChild(script);
+
+    return () => {
+      active = false;
+      embedContainer.remove();
+    };
+  }, [
+    chartBackground,
+    gridColor,
+    preferences.bearishColor,
+    preferences.bullishColor,
+    showEma,
+    showSma,
+    showVolume,
+    symbol,
+    timeframe,
+    resolvedTheme,
+    widgetKey,
+  ]);
 
   useEffect(() => {
     const syncFullScreen = () => {
@@ -222,10 +273,10 @@ export function TradingChart({
             value={activeInstrument}
             onChange={(event) => setSelectedInstrument(event.target.value)}
           >
-            {instruments.length === 0 && (
-              <option value="">No instruments available</option>
+            {favoriteInstruments.length === 0 && (
+              <option value="">No favourite instruments</option>
             )}
-            {instruments.map((item) => (
+            {favoriteInstruments.map((item) => (
               <option key={item.symbol} value={item.symbol}>
                 {item.symbol}
               </option>
@@ -306,24 +357,10 @@ export function TradingChart({
           className="chart-canvas"
           aria-label="Veytrix interactive chart"
         >
-          {symbol && (
-            <iframe
-              key={widgetKey}
-              title={`TradingView chart for ${instrument?.symbol ?? "selected market"}`}
-              src={widgetUrl}
-              className="tradingview-chart-frame"
-              onLoad={() => setWidgetLoadResult({ key: widgetKey })}
-              onError={() =>
-                setWidgetLoadResult({
-                  key: widgetKey,
-                  error: "TradingView could not load this market chart.",
-                })
-              }
-              allow="clipboard-write; fullscreen"
-              allowFullScreen
-              loading="eager"
-            />
-          )}
+          <div
+            className="tradingview-widget-container__widget"
+            ref={widgetRef}
+          />
         </div>
         {(loading || error || !symbol) && (
           <div className="chart-overlay" role={error ? "alert" : "status"}>
