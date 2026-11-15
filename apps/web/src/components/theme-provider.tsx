@@ -35,7 +35,7 @@ const defaults: UserPreferences = {
   bullishColor: "#8bd878",
   bearishColor: "#ed7777",
   accentColor: "#c6f36b",
-  defaultInstrument: "",
+  defaultInstrument: "EURUSD",
   showSma: false,
   showEma: false,
   showVolume: false,
@@ -89,8 +89,9 @@ function parsePreferences(stored: string | null): UserPreferences {
       accentColor: color(candidate.accentColor, defaults.accentColor),
       defaultInstrument:
         typeof candidate.defaultInstrument === "string" &&
+        candidate.defaultInstrument.trim().length > 0 &&
         candidate.defaultInstrument.length <= 40
-          ? candidate.defaultInstrument
+          ? candidate.defaultInstrument.trim().toUpperCase()
           : defaults.defaultInstrument,
       showSma:
         typeof candidate.showSma === "boolean"

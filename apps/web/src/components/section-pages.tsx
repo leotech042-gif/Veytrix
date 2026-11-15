@@ -85,6 +85,7 @@ export function SectionPage({
   symbol?: string;
 }) {
   const feed = useMarketFeed();
+  const { preferences } = usePreferences();
 
   if (section === "signals") return <SignalsPage />;
   if (section === "fundamentals") return <FundamentalsPage />;
@@ -103,6 +104,12 @@ export function SectionPage({
   }
 
   if (section === "charts") {
+    const preferredChartSymbol =
+      symbol ||
+      (feed.instruments.some((instrument) => instrument.symbol === "EURUSD")
+        ? "EURUSD"
+        : preferences.defaultInstrument || feed.instruments[0]?.symbol || "");
+
     return (
       <>
         <PageHeading
@@ -112,7 +119,7 @@ export function SectionPage({
         />
         <TradingChart
           instruments={feed.instruments}
-          initialInstrument={symbol}
+          initialInstrument={preferredChartSymbol}
         />
       </>
     );

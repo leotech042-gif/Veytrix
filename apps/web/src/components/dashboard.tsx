@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { usePreferences } from "./theme-provider";
 import { MarketWatch, useMarketFeed } from "./market-watch";
 import { TradingChart } from "./trading-chart";
 
@@ -24,7 +25,16 @@ function SummaryCard({
 
 export function Dashboard() {
   const feed = useMarketFeed();
+  const { preferences } = usePreferences();
   const accountConnected = false;
+  const preferredMainInstrument =
+    feed.instruments.some((instrument) => instrument.symbol === "EURUSD")
+      ? "EURUSD"
+      : feed.instruments.some(
+            (instrument) => instrument.symbol === preferences.defaultInstrument,
+          )
+        ? preferences.defaultInstrument
+        : feed.instruments[0]?.symbol ?? "";
 
   return (
     <>
@@ -101,7 +111,7 @@ export function Dashboard() {
       <div className="dashboard-grid">
         <TradingChart
           instruments={feed.instruments}
-          initialInstrument={feed.instruments[0]?.symbol}
+          initialInstrument={preferredMainInstrument}
           compact
         />
         <MarketWatch feed={feed} favoritesOnly compact />
