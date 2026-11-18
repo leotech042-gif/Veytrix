@@ -53,29 +53,28 @@ export function Dashboard() {
         : feed.status?.state === "disconnected"
           ? "Disconnected"
           : feed.error
-            ? "API offline"
-            : "Not configured";
+            ? "Offline"
+            : "Not set";
 
   return (
     <>
       <p className="greeting">
-        {greeting()} · <strong>Your market at a glance</strong>
+        {greeting()}
       </p>
 
-      {/* Status hero — real connection, no fake balance */}
       <section className="hero-card mb-4">
         <div className="flex-between">
           <div>
-            <div className="balance-label">Market data</div>
+            <div className="balance-label">Feed</div>
             <div className="balance-value" style={{ fontSize: 22 }}>
               {providerLabel}
             </div>
             <div className="balance-delta">
               {feed.status?.state === "connected"
                 ? feed.status.delayed
-                  ? "Delayed quotes"
-                  : "Live provider connected"
-                : "Configure a provider to see live quotes & signals"}
+                  ? "Delayed"
+                  : "Live"
+                : "No provider"}
             </div>
           </div>
           <AiOrb
@@ -85,7 +84,7 @@ export function Dashboard() {
         </div>
         <div className="balance-meta">
           <div className="meta-item">
-            <span className="label">Instruments</span>
+            <span className="label">Pairs</span>
             <span className="value">
               {feed.status?.state === "connected" ? feed.instruments.length : "—"}
             </span>
@@ -98,7 +97,7 @@ export function Dashboard() {
           </div>
           <div className="meta-item">
             <span className="label">Broker</span>
-            <span className="value">Not linked</span>
+            <span className="value">Off</span>
           </div>
         </div>
       </section>
@@ -109,17 +108,16 @@ export function Dashboard() {
         </div>
       )}
 
-      {/* Veytrix scan */}
       <section className="scan-card mb-4">
         <AiOrb variant={scanning ? "analyzing" : scanDone ? "idle" : "loading"} size="sm" />
         <div className="scan-info">
-          <p className="scan-title">Veytrix scan</p>
+          <p className="scan-title">Scan</p>
           <p className="scan-sub">
             {scanning
-              ? "Scanning watchlist for structure & confluence…"
+              ? "Reading structure…"
               : scanDone
-                ? `${setups} setup${setups === 1 ? "" : "s"} · ${biases} bias only`
-                : "Run a technical scan on your watchlist"}
+                ? `${setups} setup · ${biases} bias`
+                : "Tap to scan watchlist"}
           </p>
         </div>
         {scanDone && !scanning && <span className="scan-badge">Live</span>}
@@ -131,32 +129,28 @@ export function Dashboard() {
         onClick={() => void runScan()}
         disabled={scanning || feed.status?.state !== "connected"}
       >
-        {scanning ? "Scanning…" : scanDone ? "Run scan again" : "Run scan"}
+        {scanning ? "Scanning…" : scanDone ? "Scan again" : "Scan"}
       </button>
 
-      {/* Watchlist */}
       <section className="panel mb-4">
         <div className="panel-heading">
           <div>
             <h2>Watchlist</h2>
-            <p className="panel-description">Live quotes from the connected provider</p>
           </div>
           <Link className="text-button" href="/markets">
-            Open
+            All
           </Link>
         </div>
         <MarketWatch feed={feed} favoritesOnly compact />
       </section>
 
-      {/* Latest signal */}
       <section className="panel">
         <div className="panel-heading">
           <div>
-            <h2>Latest signal</h2>
-            <p className="panel-description">From the Veytrix technical engine</p>
+            <h2>Signal</h2>
           </div>
           <Link className="text-button" href="/signals">
-            Signal room
+            Room
           </Link>
         </div>
 
@@ -181,7 +175,7 @@ export function Dashboard() {
               </span>
             </div>
             <p className="signal-meta">
-              {latestSetup.timeframe} · {latestSetup.confidence}% confidence
+              {latestSetup.timeframe} · {latestSetup.confidence}%
               {latestSetup.riskReward ? ` · 1:${latestSetup.riskReward}` : ""}
             </p>
             {latestSetup.entry != null && (
@@ -200,24 +194,18 @@ export function Dashboard() {
                 </div>
               </div>
             )}
-            <p className="signal-summary">{latestSetup.summary}</p>
           </article>
         ) : (
           <div className="empty-state">
             <div className="mark">⌖</div>
             <p>
               {feed.status?.state === "connected"
-                ? "No setup with sufficient confluence right now. Check Signal room for bias-only reads."
-                : "Connect a market-data provider to generate live technical signals."}
+                ? "No setup right now"
+                : "Connect a provider"}
             </p>
           </div>
         )}
       </section>
-
-      <p className="footer-note text-muted mt-4" style={{ fontSize: 12, lineHeight: 1.45 }}>
-        Quotes and signals come from the configured provider and technical engine.
-        Veytrix does not place orders or guarantee outcomes. Trading involves risk.
-      </p>
     </>
   );
 }
