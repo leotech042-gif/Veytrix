@@ -3,20 +3,23 @@
 import { usePreferences } from "./theme-provider";
 
 export function ThemeToggle() {
-  const { updatePreferences } = usePreferences();
+  const { preferences, updatePreferences } = usePreferences();
 
   return (
     <button
       className="icon-button theme-toggle"
       type="button"
-      aria-label="Toggle light and dark themes"
-      title="Toggle light and dark themes"
-      onClick={() =>
-        updatePreferences({
-          theme:
-            document.documentElement.dataset.theme === "dark" ? "light" : "dark",
-        })
-      }
+      aria-label="Toggle theme"
+      title="Toggle theme"
+      onClick={() => {
+        const current =
+          preferences.theme === "system"
+            ? document.documentElement.dataset.theme === "dark"
+              ? "dark"
+              : "light"
+            : preferences.theme;
+        updatePreferences({ theme: current === "dark" ? "light" : "dark" });
+      }}
     >
       <span aria-hidden="true">◐</span>
     </button>
