@@ -8,17 +8,22 @@ import type { MarketDataStatus } from "@veytrix/shared";
 import { ThemeToggle } from "./theme-toggle";
 import { useHydrated } from "./theme-provider";
 
-const navigation = [
-  { href: "/", label: "Dashboard", icon: "⌂" },
-  { href: "/markets", label: "Markets", icon: "◈" },
-  { href: "/terminal", label: "Trading Terminal", icon: "▦" },
-  { href: "/charts", label: "Charts", icon: "⌁" },
-  { href: "/signals", label: "Signal Room", icon: "⌖" },
-  { href: "/fundamentals", label: "Fundamental Analysis", icon: "◉" },
-  { href: "/history", label: "Trading History", icon: "◷" },
-  { href: "/assistant", label: "AI Assistant", icon: "✳" },
+const desktopNav = [
+  { href: "/", label: "Home", icon: "⌂" },
+  { href: "/signals", label: "Signals", icon: "⌖" },
+  { href: "/charts", label: "Chart", icon: "⌁" },
+  { href: "/fundamentals", label: "News", icon: "◉" },
   { href: "/settings", label: "Settings", icon: "⚙" },
+  { href: "/markets", label: "Markets", icon: "◈" },
   { href: "/faq", label: "FAQ", icon: "?" },
+];
+
+const bottomNav = [
+  { href: "/", label: "Home", icon: "⌂" },
+  { href: "/signals", label: "Signals", icon: "⌖" },
+  { href: "/charts", label: "Chart", icon: "⌁" },
+  { href: "/fundamentals", label: "News", icon: "◉" },
+  { href: "/settings", label: "Settings", icon: "⚙" },
 ];
 
 type StatusState =
@@ -55,28 +60,29 @@ function useMarketConnection(): StatusState {
 }
 
 function connectionLabel(state: StatusState): string {
-  if (state.kind === "checking") return "Checking market feed";
-  if (state.kind === "error") return "Market API unavailable";
+  if (state.kind === "checking") return "Checking feed";
+  if (state.kind === "error") return "API unavailable";
   if (state.status.state === "connected") {
-    return state.status.delayed
-      ? "Delayed market data"
-      : "Market feed connected";
+    return state.status.delayed ? "Delayed data" : "Live feed";
   }
-  if (state.status.state === "disconnected") return "Market feed disconnected";
-  return "Market feed not configured";
+  if (state.status.state === "disconnected") return "Disconnected";
+  return "Not configured";
 }
 
 export function WorkspaceShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const [openMenuPath, setOpenMenuPath] = useState<string | null>(null);
   const connection = useMarketConnection();
   const hydrated = useHydrated();
-  const mobileMenuOpen = openMenuPath === pathname;
   const visibleConnection: StatusState = hydrated
     ? connection
     : { kind: "checking" };
 
-  const navigationLinks = navigation.map((item) => {
+  const isConnected =
+    visibleConnection.kind === "ready" &&
+    visibleConnection.status.state === "connected" &&
+    !visibleConnection.status.delayed;
+
+  const navigationLinks = desktopNav.map((item) => {
     const active =
       item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
     return (
@@ -96,15 +102,15 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }) {
 
   const marketStatusCopy =
     visibleConnection.kind === "error"
-      ? "Start the API to check the current provider connection."
+      ? "Start the API to check the provider connection."
       : visibleConnection.kind === "ready"
         ? visibleConnection.status.message
-        : "Checking the configured provider status.";
+        : "Checking provider status…";
 
   return (
     <div className="app-shell">
       <aside className="sidebar">
-        <Link className="brand" href="/" aria-label="Veytrix dashboard">
+        <Link className="brand" href="/" aria-label="Veytrix home">
           <span className="brand-mark" aria-hidden="true">
             V
           </span>
@@ -119,9 +125,7 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }) {
         <div className="sidebar-bottom">
           <div className="connection-card">
             <div className="connection-title" aria-live="polite">
-              <span
-                className={`state-dot${visibleConnection.kind === "ready" && visibleConnection.status.state === "connected" && !visibleConnection.status.delayed ? " connected" : ""}`}
-              />
+              <span className={`state-dot${isConnected ? " connected" : ""}`} />
               {connectionLabel(visibleConnection)}
             </div>
             <p className="connection-copy">{marketStatusCopy}</p>
@@ -132,7 +136,7 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }) {
             </span>
             <span>
               <span className="user-name">Local workspace</span>
-              <span className="user-tier">Profile not connected</span>
+              <span className="user-tier">Broker not connected</span>
             </span>
           </Link>
         </div>
@@ -140,98 +144,55 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }) {
 
       <div className="workspace-main">
         <header className="topbar">
-          <button
-            className="mobile-menu-button"
-            type="button"
-            aria-expanded={mobileMenuOpen}
-            aria-controls="mobile-navigation"
-            onClick={() =>
-              setOpenMenuPath((openPath) =>
-                openPath === pathname ? null : pathname,
-              )
-            }
-          >
-            <span aria-hidden="true">{mobileMenuOpen ? "×" : "☰"}</span>
-            <span className="visually-hidden">
-              {mobileMenuOpen ? "Close navigation" : "Open navigation"}
+          <Link className="brand" href="/">
+            <span className="brand-mark" aria-hidden="true">
+              V
             </span>
-          </button>
+            Veytrix
+          </Link>
           <div className="breadcrumb">
             Workspace <span aria-hidden="true">/</span>{" "}
-            {navigation.find((item) =>
-              item.href === "/" ? pathname === "/" : item.href === pathname,
+            {desktopNav.find((item) =>
+              item.href === "/" ? pathname === "/" : pathname.startsWith(item.href),
             )?.label ?? "Veytrix"}
           </div>
           <div className="top-actions">
             <span className="market-state" aria-live="polite">
-              <span
-                className={`state-dot${visibleConnection.kind === "ready" && visibleConnection.status.state === "connected" && !visibleConnection.status.delayed ? " connected" : ""}`}
-              />
+              <span className={`state-dot${isConnected ? " connected" : ""}`} />
               {connectionLabel(visibleConnection)}
             </span>
             <ThemeToggle />
             <Link
               className="icon-button profile-button"
               href="/settings"
-              aria-label="Profile and settings"
-              title="Profile and settings"
+              aria-label="Settings"
+              title="Settings"
             >
               VX
             </Link>
           </div>
         </header>
 
-        {mobileMenuOpen && (
-          <nav
-            className="mobile-navigation"
-            id="mobile-navigation"
-            aria-label="Mobile navigation"
-          >
-            {navigationLinks}
-          </nav>
-        )}
-
         <main className="main-area">{children}</main>
 
-        <nav
-          className="mobile-bottom-nav"
-          aria-label="Mobile primary navigation"
-        >
-          {navigation
-            .filter((item) =>
-              ["/", "/markets", "/terminal", "/charts"].includes(item.href),
-            )
-            .map((item) => {
-              const active =
-                item.href === "/"
-                  ? pathname === "/"
-                  : pathname.startsWith(item.href);
-              return (
-                <Link
-                  className={`mobile-bottom-item${active ? " active" : ""}`}
-                  href={item.href}
-                  aria-current={active ? "page" : undefined}
-                  key={item.href}
-                >
-                  <span aria-hidden="true">{item.icon}</span>
-                  {item.label === "Trading Terminal" ? "Terminal" : item.label}
-                </Link>
-              );
-            })}
-          <button
-            className={`mobile-bottom-item${mobileMenuOpen ? " active" : ""}`}
-            type="button"
-            aria-expanded={mobileMenuOpen}
-            aria-controls="mobile-navigation"
-            onClick={() =>
-              setOpenMenuPath((openPath) =>
-                openPath === pathname ? null : pathname,
-              )
-            }
-          >
-            <span aria-hidden="true">•••</span>
-            More
-          </button>
+        <nav className="mobile-bottom-nav" aria-label="Primary navigation">
+          {bottomNav.map((item) => {
+            const active =
+              item.href === "/"
+                ? pathname === "/"
+                : pathname.startsWith(item.href);
+            return (
+              <Link
+                className={`mobile-bottom-item${active ? " active" : ""}`}
+                href={item.href}
+                aria-current={active ? "page" : undefined}
+                key={item.href}
+              >
+                <span aria-hidden="true">{item.icon}</span>
+                {item.label}
+              </Link>
+            );
+          })}
         </nav>
 
         {pathname === "/" && <DashboardFooter />}
@@ -250,17 +211,16 @@ function DashboardFooter() {
           </span>
           Veytrix
         </Link>
-        <p>Market tools with transparent data status.</p>
+        <p>Clarity before the candle. Real market data when a provider is configured.</p>
         <p className="risk-copy">
-          Trading forex, CFDs, crypto and other leveraged products involves
-          substantial risk and may not be suitable for all investors.
+          Trading involves substantial risk of loss and is not suitable for every investor.
         </p>
       </div>
       <div className="footer-column">
         <h2>Platform</h2>
-        <Link href="/markets">Markets</Link>
-        <Link href="/terminal">Trading terminal</Link>
+        <Link href="/signals">Signals</Link>
         <Link href="/charts">Charts</Link>
+        <Link href="/fundamentals">News</Link>
         <Link href="/settings">Settings</Link>
       </div>
       <div className="footer-column">
@@ -272,8 +232,8 @@ function DashboardFooter() {
       </div>
       <SocialLinks />
       <div className="footer-bottom">
-        Copyright Veytrix. Market data is unavailable until a provider is
-        configured. Nothing on this platform is investment advice.
+        © {new Date().getFullYear()} Veytrix. Market data appears only from a configured
+        provider. Nothing here is investment advice.
       </div>
     </footer>
   );
@@ -293,7 +253,7 @@ export function getOfficialSocialLinks() {
       host: "linkedin.com",
     },
     {
-      label: "Tiktok",
+      label: "TikTok",
       url:
         process.env.NEXT_PUBLIC_SOCIAL_TIKTOK_URL ??
         "https://tiktok.com/@veytrixofficial",
@@ -322,7 +282,7 @@ export function getOfficialSocialLinks() {
     if (!link.url) return false;
     try {
       const url = new URL(link.url);
-      return url.protocol === "https:" && url.hostname === link.host;
+      return url.protocol === "https:" && url.hostname.endsWith(link.host);
     } catch {
       return false;
     }
