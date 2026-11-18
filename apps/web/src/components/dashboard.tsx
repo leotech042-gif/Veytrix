@@ -58,9 +58,7 @@ export function Dashboard() {
 
   return (
     <>
-      <p className="greeting">
-        {greeting()}
-      </p>
+      <p className="greeting">{greeting()}</p>
 
       <section className="hero-card mb-4">
         <div className="flex-between">
@@ -78,7 +76,13 @@ export function Dashboard() {
             </div>
           </div>
           <AiOrb
-            variant={scanning ? "scanning" : feed.status?.state === "connected" ? "idle" : "loading"}
+            variant={
+              scanning
+                ? "scanning"
+                : feed.status?.state === "connected"
+                  ? "idle"
+                  : "loading"
+            }
             size="md"
           />
         </div>
@@ -109,7 +113,10 @@ export function Dashboard() {
       )}
 
       <section className="scan-card mb-4">
-        <AiOrb variant={scanning ? "analyzing" : scanDone ? "idle" : "loading"} size="sm" />
+        <AiOrb
+          variant={scanning ? "analyzing" : scanDone ? "idle" : "loading"}
+          size="sm"
+        />
         <div className="scan-info">
           <p className="scan-title">Scan</p>
           <p className="scan-sub">
@@ -117,7 +124,7 @@ export function Dashboard() {
               ? "Reading structure…"
               : scanDone
                 ? `${setups} setup · ${biases} bias`
-                : "Tap to scan watchlist"}
+                : "Tap to scan"}
           </p>
         </div>
         {scanDone && !scanning && <span className="scan-badge">Live</span>}
@@ -155,7 +162,10 @@ export function Dashboard() {
         </div>
 
         {latestSetup ? (
-          <article className="signal-card" style={{ marginBottom: 0, border: "none", padding: 0 }}>
+          <article
+            className="signal-card"
+            style={{ marginBottom: 0, border: "none", padding: 0 }}
+          >
             <div className="signal-header">
               <span className="signal-pair">{latestSetup.instrument}</span>
               <span
@@ -194,6 +204,9 @@ export function Dashboard() {
                 </div>
               </div>
             )}
+            {latestSetup.summary ? (
+              <p className="signal-reason">{latestSetup.summary}</p>
+            ) : null}
           </article>
         ) : (
           <div className="empty-state">
