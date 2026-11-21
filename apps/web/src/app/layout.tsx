@@ -2,6 +2,7 @@ import { Suspense } from "react";
 import type { Metadata } from "next";
 import { ThemeProvider, themeBootstrapScript } from "@/components/theme-provider";
 import { WorkspaceShell } from "@/components/workspace-shell";
+import { AuthGate } from "@/components/auth-gate";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -24,11 +25,13 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
           <Suspense
             fallback={
               <div className="workspace-loading" role="status">
-                Loading Veytrix workspace…
+                Loading…
               </div>
             }
           >
-            <WorkspaceShell>{children}</WorkspaceShell>
+            <AuthGate>
+              <WorkspaceShell>{children}</WorkspaceShell>
+            </AuthGate>
           </Suspense>
         </ThemeProvider>
       </body>

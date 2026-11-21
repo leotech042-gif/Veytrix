@@ -5,7 +5,7 @@ import { HealthController } from "./health.controller";
 import { MarketDataController } from "./market-data/market-data.controller";
 import { MarketDataService } from "./market-data/market-data.service";
 import { MARKET_DATA_PROVIDER } from "./market-data/market-data-provider";
-import { TiingoMarketDataProvider } from "./market-data/tiingo-market-data.provider";
+import { DerivMarketDataProvider } from "./market-data/deriv-market-data.provider";
 import { SignalsController } from "./signals/signals.controller";
 import { SignalsService } from "./signals/signals.service";
 import { SIGNAL_PROVIDER } from "./signals/signal-provider";
@@ -28,7 +28,7 @@ import { FundamentalsModule } from "./fundamentals/fundamentals.module";
     SignalsService,
     {
       provide: MARKET_DATA_PROVIDER,
-      useClass: TiingoMarketDataProvider,
+      useClass: DerivMarketDataProvider,
     },
 
     TechnicalSignalProvider,
