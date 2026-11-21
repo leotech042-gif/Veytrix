@@ -119,6 +119,10 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }) {
     visibleConnection.status.state === "connected" &&
     !visibleConnection.status.delayed;
 
+  if (pathname === "/login") {
+    return <>{children}</>;
+  }
+
   return (
     <div className="app-shell">
       <aside className="sidebar">
