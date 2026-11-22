@@ -3,7 +3,6 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import type { ChartTimeframe, MarketInstrument } from "@veytrix/shared";
 import { useHydrated, usePreferences } from "./theme-provider";
-import { useMarketFavorites } from "./market-watch";
 
 const timeframes: ChartTimeframe[] = [
   "M1",
@@ -94,8 +93,20 @@ export function TradingChart({
 }) {
   const panelRef = useRef<HTMLElement>(null);
   const widgetRef = useRef<HTMLDivElement>(null);
-  const [selectedInstrument, setSelectedInstrument] =
-    useState(initialInstrument);
+  const list =
+    instruments.length > 0
+      ? instruments
+      : ([
+          {
+            symbol: "EURUSD",
+            displayName: "Euro / US Dollar",
+            category: "forex",
+          },
+        ] as MarketInstrument[]);
+
+  const [selectedInstrument, setSelectedInstrument] = useState(
+    initialInstrument || "EURUSD",
+  );
   const [selectedTimeframe, setSelectedTimeframe] =
     useState<ChartTimeframe | null>(null);
   const [fullScreen, setFullScreen] = useState(false);
@@ -105,37 +116,29 @@ export function TradingChart({
 
   const hydrated = useHydrated();
   const { preferences, updatePreferences } = usePreferences();
-  const { favorites } = useMarketFavorites();
   const resolvedTheme = useSyncExternalStore(
     subscribeToResolvedTheme,
     getResolvedTheme,
     getServerTheme,
   );
 
-  const favoriteInstruments = instruments.filter((instrument) =>
-    favorites.includes(instrument.symbol),
-  );
-  const activeInstrument = favoriteInstruments.some(
-    (instrument) => instrument.symbol === selectedInstrument,
-  )
-    ? selectedInstrument
-    : favoriteInstruments.some(
-          (instrument) => instrument.symbol === initialInstrument,
-        )
-      ? initialInstrument
-      : (favoriteInstruments[0]?.symbol ?? "");
-  const instrument = favoriteInstruments.find(
-    (item) => item.symbol === activeInstrument,
-  );
+  const activeInstrument =
+    list.some((i) => i.symbol === selectedInstrument)
+      ? selectedInstrument
+      : list.some((i) => i.symbol === initialInstrument)
+        ? initialInstrument
+        : list[0]?.symbol ?? "EURUSD";
+
+  const instrument =
+    list.find((item) => item.symbol === activeInstrument) ?? list[0];
   const symbol = toTradingViewSymbol(instrument);
   const timeframe =
-    selectedTimeframe ??
-    (hydrated ? preferences.defaultTimeframe : "H1");
+    selectedTimeframe ?? (hydrated ? preferences.defaultTimeframe : "H1");
   const showVolume = hydrated ? preferences.showVolume : false;
   const showSma = hydrated ? preferences.showSma : false;
   const showEma = hydrated ? preferences.showEma : false;
   const chartBackground =
-    resolvedTheme === "light" ? "#ffffff" : preferences.chartBackground;
+    resolvedTheme === "light" ? "#ffffff" : preferences.chartBackground || "#0a0a0a";
   const gridColor = resolvedTheme === "light" ? "#dce2e9" : "#202a37";
   const widgetKey = JSON.stringify([
     symbol,
@@ -154,13 +157,14 @@ export function TradingChart({
     widgetLoadResult?.key === widgetKey
       ? (widgetLoadResult.error ?? null)
       : null;
+
   useEffect(() => {
     const widget = widgetRef.current;
     if (!widget || !symbol) return;
 
     let active = true;
     const embedContainer = document.createElement("div");
-    embedContainer.className = "tradingview-widget-generation";
+    embedContainer.className = "tradingview-widget-container";
     embedContainer.style.width = "100%";
     embedContainer.style.height = "100%";
     widget.replaceChildren(embedContainer);
@@ -180,7 +184,7 @@ export function TradingChart({
       symbol,
       interval: tradingViewIntervals[timeframe],
       timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-      theme: resolvedTheme,
+      theme: "dark",
       style: "1",
       locale: "en",
       allow_symbol_change: false,
@@ -210,7 +214,7 @@ export function TradingChart({
       if (active) {
         setWidgetLoadResult({
           key: widgetKey,
-          error: "The Veytrix chart could not be loaded.",
+          error: "Chart could not load. Check network.",
         });
       }
     };
@@ -273,10 +277,7 @@ export function TradingChart({
             value={activeInstrument}
             onChange={(event) => setSelectedInstrument(event.target.value)}
           >
-            {favoriteInstruments.length === 0 && (
-              <option value="">No favourite instruments</option>
-            )}
-            {favoriteInstruments.map((item) => (
+            {list.map((item) => (
               <option key={item.symbol} value={item.symbol}>
                 {item.symbol}
               </option>
@@ -353,28 +354,16 @@ export function TradingChart({
       </div>
 
       <div className="chart-canvas-wrap">
-        <div
-          className="chart-canvas"
-          aria-label="Veytrix interactive chart"
-        >
+        <div className="chart-canvas" aria-label="Veytrix interactive chart">
           <div
             className="tradingview-widget-container__widget"
             ref={widgetRef}
+            style={{ width: "100%", height: "100%", minHeight: 420 }}
           />
         </div>
-        {(loading || error || !symbol) && (
+        {(loading || error) && (
           <div className="chart-overlay" role={error ? "alert" : "status"}>
-            <span className="chart-placeholder-icon" aria-hidden="true">
-              {error ? "⌁" : "…"}
-            </span>
-            <strong>
-              {!symbol
-                ? "Star an instrument in Markets to see its chart here."
-                : loading
-                  ? "Loading Veytrix chart…"
-                  : "Veytrix chart unavailable"}
-            </strong>
-            {error && <span>{error}</span>}
+            <strong>{error ? error : "Loading chart…"}</strong>
           </div>
         )}
       </div>
@@ -382,8 +371,8 @@ export function TradingChart({
       <div className="chart-data-footer">
         <span>
           {instrument
-            ? `Veytrix · ${instrument.symbol} · ${instrument.displayName}`
-            : "Veytrix chart"}
+            ? `${instrument.symbol} · ${instrument.displayName}`
+            : "Chart"}
         </span>
       </div>
     </section>
