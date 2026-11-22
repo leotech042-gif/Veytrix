@@ -1,0 +1,69 @@
+/* Black + gold — soft gold accent, no cyan, no orb glow */
+:root {
+  color-scheme: dark;
+  --bg: #0a0a0a;
+  --bg-elevated: #111111;
+  --surface: #141414;
+  --surface-raised: #1c1c1c;
+  --surface-hover: #242424;
+  --border: #2e2e2e;
+  --border-subtle: #222222;
+  --text: #f5f0e8;
+  --text-secondary: #b0a794;
+  --muted: #6e675c;
+  --accent: #c4a574;
+  --accent-dim: #a8895a;
+  --accent-glow: rgba(196, 165, 116, 0.28);
+  --purple: #8a7a5c;
+  --danger: #c07070;
+  --success: #c4a574;
+  --warning: #d4a84b;
+}
+.ai-orb,
+.ai-orb__ring,
+.ai-orb__glow,
+.ai-orb__particles,
+.ai-orb__core,
+.ai-orb__scan {
+  display: none !important;
+}
+.page-heading {
+  display: none !important;
+}
+.home-balance-card::after,
+.sig-card.buy::before,
+.sig-card.sell::before {
+  display: none !important;
+}
+.brand-mark {
+  background: linear-gradient(135deg, #c4a574, #8a7050) !important;
+  box-shadow: 0 0 14px rgba(196, 165, 116, 0.4) !important;
+  color: #0a0a0a !important;
+}
+.primary-button,
+.login-submit,
+.sig-filter.on,
+.segmented-control button.selected {
+  background: var(--accent) !important;
+  color: #0a0a0a !important;
+  border-color: var(--accent) !important;
+}
+.home-watch-search {
+  margin-bottom: 10px;
+}
+.home-watch-search input {
+  width: 100%;
+  padding: 11px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 14px;
+}
+.home-watch-ba {
+  display: block;
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 2px;
+  font-weight: 400;
+}

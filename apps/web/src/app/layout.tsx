@@ -4,6 +4,7 @@ import { ThemeProvider, themeBootstrapScript } from "@/components/theme-provider
 import { WorkspaceShell } from "@/components/workspace-shell";
 import { AuthGate } from "@/components/auth-gate";
 import "./globals.css";
+import "./theme-black-gold.css";
 
 export const metadata: Metadata = {
   title: {
