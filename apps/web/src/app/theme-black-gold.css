@@ -1,4 +1,4 @@
-/* Black + gold — soft gold accent, no cyan, no orb glow */
+/* Black + gold — no cyan/blue panels */
 html {
   color-scheme: dark;
 }
@@ -27,6 +27,14 @@ body {
   background: #0a0a0a !important;
   color: #f5f0e8 !important;
 }
+
+/* Hide blue LIVE FEED / MARKET FEED card completely */
+.home-balance-card,
+.page-heading {
+  display: none !important;
+}
+
+/* No cyan orbs */
 .ai-orb,
 .ai-orb__ring,
 .ai-orb__glow,
@@ -35,14 +43,12 @@ body {
 .ai-orb__scan {
   display: none !important;
 }
-.page-heading,
-.home-balance-card {
-  display: none !important;
-}
-.home-balance-card::after,
-.sig-card.buy::before,
-.sig-card.sell::before {
-  display: none !important;
+
+/* Nav active: gold, not teal/blue */
+.nav-item.active,
+.mobile-bottom-item.active {
+  background: rgba(196, 165, 116, 0.12) !important;
+  color: #c4a574 !important;
 }
 .brand-mark {
   background: linear-gradient(135deg, #c4a574, #8a7050) !important;
@@ -52,11 +58,13 @@ body {
 .primary-button,
 .login-submit,
 .sig-filter.on,
-.segmented-control button.selected {
+.segmented-control button.selected,
+.timeframe-button.active {
   background: var(--accent) !important;
   color: #0a0a0a !important;
   border-color: var(--accent) !important;
 }
+
 .home-watch-search {
   margin-bottom: 10px;
 }
@@ -76,6 +84,8 @@ body {
   margin-top: 2px;
   font-weight: 400;
 }
+
+/* Chart size + true fullscreen (covers sidebar) */
 .chart-canvas-wrap {
   min-height: 420px !important;
 }
@@ -84,8 +94,30 @@ body {
   min-height: 420px !important;
   height: 480px !important;
 }
+.trading-chart-panel.chart-fullscreen {
+  position: fixed !important;
+  inset: 0 !important;
+  z-index: 9999 !important;
+  width: 100vw !important;
+  height: 100dvh !important;
+  margin: 0 !important;
+  border-radius: 0 !important;
+  background: #0a0a0a !important;
+  display: flex !important;
+  flex-direction: column !important;
+  padding: 12px !important;
+}
+.trading-chart-panel.chart-fullscreen .chart-canvas-wrap {
+  flex: 1 !important;
+  min-height: 0 !important;
+}
+.trading-chart-panel.chart-fullscreen .chart-canvas,
+.trading-chart-panel.chart-fullscreen .tradingview-widget-container__widget {
+  height: 100% !important;
+  min-height: 0 !important;
+}
 
-/* Signal cards — classic terminal style */
+/* Signal cards */
 .vx-sig-card {
   position: relative;
   background: #12141a;
