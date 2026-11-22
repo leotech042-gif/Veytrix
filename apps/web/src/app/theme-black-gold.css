@@ -1,4 +1,8 @@
 /* Black + gold — soft gold accent, no cyan, no orb glow */
+html {
+  color-scheme: dark;
+}
+html[data-theme="light"],
 :root {
   color-scheme: dark;
   --bg: #0a0a0a;
@@ -19,6 +23,10 @@
   --success: #c4a574;
   --warning: #d4a84b;
 }
+body {
+  background: #0a0a0a !important;
+  color: #f5f0e8 !important;
+}
 .ai-orb,
 .ai-orb__ring,
 .ai-orb__glow,
@@ -27,7 +35,8 @@
 .ai-orb__scan {
   display: none !important;
 }
-.page-heading {
+.page-heading,
+.home-balance-card {
   display: none !important;
 }
 .home-balance-card::after,
@@ -66,6 +75,14 @@
   color: var(--muted);
   margin-top: 2px;
   font-weight: 400;
+}
+.chart-canvas-wrap {
+  min-height: 420px !important;
+}
+.chart-canvas,
+.tradingview-widget-container__widget {
+  min-height: 420px !important;
+  height: 480px !important;
 }
 
 /* Signal cards — classic terminal style */
