@@ -7,6 +7,15 @@ import { getSignals } from "@/lib/market-data-api";
 import { PairLogo } from "./pair-logo";
 import { useMarketFeed } from "./market-watch";
 
+const DEFAULT_PAIRS = [
+  "EURUSD",
+  "GBPUSD",
+  "USDJPY",
+  "XAUUSD",
+  "AUDUSD",
+  "USDCAD",
+];
+
 export function Dashboard() {
   const feed = useMarketFeed();
   const [signals, setSignals] = useState<TradingSignal[]>([]);
@@ -14,21 +23,16 @@ export function Dashboard() {
 
   const loadSignals = useCallback(async () => {
     try {
-      const favs = feed.instruments.slice(0, 12).map((i) => i.symbol);
-      const list = await getSignals({
-        favorites: favs.length ? favs : undefined,
-      });
-      setSignals(list);
+      const list = await getSignals({ favorites: DEFAULT_PAIRS });
+      setSignals(Array.isArray(list) ? list : []);
     } catch {
       setSignals([]);
     }
-  }, [feed.instruments]);
+  }, []);
 
   useEffect(() => {
-    if (feed.status?.state === "connected" && feed.instruments.length > 0) {
-      void loadSignals();
-    }
-  }, [feed.status?.state, feed.instruments.length, loadSignals]);
+    void loadSignals();
+  }, [loadSignals]);
 
   const biases = useMemo(
     () => signals.filter((s) => s.type === "bias" || s.type === "setup"),
@@ -47,10 +51,9 @@ export function Dashboard() {
           i.displayName.toUpperCase().includes(q),
       );
     } else {
-      const preferred = ["EURUSD", "GBPUSD", "USDJPY", "XAUUSD", "AUDUSD", "USDCAD"];
-      const preferredInst = preferred
-        .map((s) => list.find((i) => i.symbol === s))
-        .filter(Boolean) as typeof list;
+      const preferredInst = DEFAULT_PAIRS.map((s) =>
+        list.find((i) => i.symbol === s),
+      ).filter(Boolean) as typeof list;
       list = preferredInst.length > 0 ? preferredInst : list.slice(0, 8);
     }
     return list.slice(0, 20).map((instrument) => {
@@ -62,48 +65,6 @@ export function Dashboard() {
 
   return (
     <div className="home-screen">
-      <section className="home-balance-card">
-        <div className="home-balance-top">
-          <div>
-            <div className="home-balance-label">
-              {feed.status?.state === "connected" ? "LIVE FEED" : "MARKET FEED"}
-            </div>
-            <div className="home-balance-value">
-              {feed.loading
-                ? "…"
-                : feed.status?.state === "connected"
-                  ? feed.status.provider ?? "Live"
-                  : "Not linked"}
-            </div>
-            <div className="home-balance-delta">
-              {feed.status?.state === "connected"
-                ? feed.status.delayed
-                  ? "Delayed quotes"
-                  : "Live · real data"
-                : "Set TIINGO_API_KEY in API env"}
-            </div>
-          </div>
-        </div>
-        <div className="home-balance-stats">
-          <div>
-            <span className="lbl">Pairs</span>
-            <span className="val">
-              {feed.status?.state === "connected" ? feed.instruments.length : "—"}
-            </span>
-          </div>
-          <div>
-            <span className="lbl">Quotes</span>
-            <span className="val">
-              {feed.status?.state === "connected" ? feed.quotes.length : "—"}
-            </span>
-          </div>
-          <div>
-            <span className="lbl">Mode</span>
-            <span className="val">Live</span>
-          </div>
-        </div>
-      </section>
-
       <section className="home-section">
         <div className="home-section-head">
           <h2>Watchlist</h2>
@@ -185,11 +146,7 @@ export function Dashboard() {
             <span className="home-signal-chevron">›</span>
           </Link>
         ) : (
-          <div className="home-empty">
-            {feed.status?.state === "connected"
-              ? "No bias right now"
-              : "Connect market data"}
-          </div>
+          <div className="home-empty">No bias right now</div>
         )}
       </section>
     </div>

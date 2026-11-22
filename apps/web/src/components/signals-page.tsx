@@ -6,6 +6,17 @@ import type { SignalProviderStatus, TradingSignal } from "@veytrix/shared";
 import { getSignalStatus, getSignals } from "@/lib/market-data-api";
 import { useMarketFavorites } from "./market-watch";
 
+const DEFAULT_PAIRS = [
+  "EURUSD",
+  "GBPUSD",
+  "USDJPY",
+  "XAUUSD",
+  "AUDUSD",
+  "USDCAD",
+  "XAGUSD",
+  "GBPJPY",
+];
+
 function isSignalStatus(value: unknown): value is SignalProviderStatus {
   if (typeof value !== "object" || value === null) return false;
   const status = value as Record<string, unknown>;
@@ -61,7 +72,8 @@ export function SignalsPage() {
         return;
       }
       const favs = marketFavorites.map((s) => s.toUpperCase());
-      const raw = await getSignals(favs.length ? { favorites: favs } : undefined);
+      const pairs = favs.length > 0 ? favs : DEFAULT_PAIRS;
+      const raw = await getSignals({ favorites: pairs });
       if (!Array.isArray(raw) || !raw.every(isTradingSignal)) {
         setSignals([]);
         return;
@@ -77,11 +89,17 @@ export function SignalsPage() {
 
   useEffect(() => {
     void load();
+    // Auto refresh every 60s
+    const t = window.setInterval(() => void load(), 60_000);
+    return () => window.clearInterval(t);
   }, [marketFavorites.join(",")]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function runSearch() {
     const s = query.trim().toUpperCase();
-    if (!s) return;
+    if (!s) {
+      void load();
+      return;
+    }
     setRefreshing(true);
     try {
       const raw = await getSignals({ instrument: s });
