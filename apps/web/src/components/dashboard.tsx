@@ -39,7 +39,9 @@ export function Dashboard() {
   const watchRows = useMemo(() => {
     const bySym = new Map(feed.quotes.map((q) => [q.instrument, q]));
     const favSet = new Set(favorites.map((s) => s.toUpperCase()));
-    let list = feed.instruments.filter((i) => favSet.has(i.symbol.toUpperCase()));
+    let list = feed.instruments.filter((i) =>
+      favSet.has(i.symbol.toUpperCase()),
+    );
 
     const q = watchQuery.trim().toUpperCase();
     if (q) {
@@ -57,8 +59,44 @@ export function Dashboard() {
     });
   }, [feed.quotes, feed.instruments, favorites, watchQuery]);
 
+  const connected = feed.status?.state === "connected";
+
   return (
     <div className="home-screen">
+      <section className="feed-status-card">
+        <div className="feed-status-main">
+          <span className="feed-status-label">Market feed</span>
+          <strong className="feed-status-value">
+            {feed.loading
+              ? "…"
+              : connected
+                ? (feed.status?.provider ?? "Live")
+                : "Not linked"}
+          </strong>
+          <span className="feed-status-note">
+            {connected
+              ? feed.status?.delayed
+                ? "Delayed quotes"
+                : "Live · real data"
+              : "Start API + set TIINGO_API_KEY"}
+          </span>
+        </div>
+        <div className="feed-status-stats">
+          <div>
+            <span>Pairs</span>
+            <strong>{connected ? feed.instruments.length : "—"}</strong>
+          </div>
+          <div>
+            <span>Quotes</span>
+            <strong>{connected ? feed.quotes.length : "—"}</strong>
+          </div>
+          <div>
+            <span>Mode</span>
+            <strong>Live</strong>
+          </div>
+        </div>
+      </section>
+
       <section className="home-section">
         <div className="home-section-head">
           <h2>Watchlist</h2>
@@ -98,17 +136,6 @@ export function Dashboard() {
                       })
                     : "—"}
                 </strong>
-                {quote?.bid != null && quote?.ask != null && (
-                  <span className="home-watch-ba">
-                    {quote.bid.toLocaleString(undefined, {
-                      maximumFractionDigits: 5,
-                    })}{" "}
-                    /{" "}
-                    {quote.ask.toLocaleString(undefined, {
-                      maximumFractionDigits: 5,
-                    })}
-                  </span>
-                )}
               </span>
             </div>
           ))}

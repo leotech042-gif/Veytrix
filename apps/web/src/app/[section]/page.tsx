@@ -2,6 +2,9 @@ import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import { SectionPage } from "@/components/section-pages";
 
+export const dynamic = "force-dynamic";
+export const instant = false;
+
 const sections = new Set([
   "markets",
   "terminal",
@@ -44,12 +47,12 @@ async function WorkspaceSectionContent({
   params: Promise<{ section: string }>;
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
 }) {
-  const [{ section }, { symbol }] = await Promise.all([params, searchParams]);
+  const { section } = await params;
   if (!sections.has(section)) notFound();
-  return (
-    <SectionPage
-      section={section}
-      symbol={typeof symbol === "string" ? symbol : ""}
-    />
-  );
+
+  const sp = await searchParams;
+  const symbolRaw = sp?.symbol;
+  const symbol = Array.isArray(symbolRaw) ? symbolRaw[0] ?? "" : symbolRaw ?? "";
+
+  return <SectionPage section={section} symbol={symbol} />;
 }
