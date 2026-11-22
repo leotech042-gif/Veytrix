@@ -67,3 +67,137 @@
   margin-top: 2px;
   font-weight: 400;
 }
+
+/* Signal cards — classic terminal style */
+.vx-sig-card {
+  position: relative;
+  background: #12141a;
+  border: 1px solid #22262f;
+  border-radius: 14px;
+  padding: 16px 16px 14px;
+  overflow: hidden;
+  margin-bottom: 12px;
+}
+.vx-sig-card::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  border-radius: 14px 0 0 14px;
+  background: #c4a574;
+}
+.vx-sig-card.sell::before { background: #e85d6a; }
+.vx-sig-card.buy::before { background: #3dba8a; }
+.vx-sig-card.neutral::before { background: #6e675c; }
+.vx-sig-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+  gap: 8px;
+}
+.vx-sig-kind {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.6px;
+  color: #9aa3b2;
+  text-transform: uppercase;
+}
+.vx-sig-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #c4a574;
+  box-shadow: 0 0 8px rgba(196,165,116,0.55);
+}
+.vx-sig-card.sell .vx-sig-dot {
+  background: #e85d6a;
+  box-shadow: 0 0 8px rgba(232,93,106,0.45);
+}
+.vx-sig-card.buy .vx-sig-dot {
+  background: #3dba8a;
+  box-shadow: 0 0 8px rgba(61,186,138,0.45);
+}
+.vx-sig-status {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid #2a2f3a;
+  color: #9aa3b2;
+  background: #0e1016;
+}
+.vx-sig-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+.vx-sig-title strong {
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: -0.3px;
+  color: #f0f2f6;
+}
+.vx-sig-dir {
+  font-size: 11px;
+  font-weight: 800;
+  padding: 5px 10px;
+  border-radius: 8px;
+  letter-spacing: 0.4px;
+}
+.vx-sig-dir.sell {
+  background: rgba(232, 93, 106, 0.15);
+  color: #ff7a86;
+  border: 1px solid rgba(232, 93, 106, 0.35);
+}
+.vx-sig-dir.buy {
+  background: rgba(61, 186, 138, 0.15);
+  color: #4fd6a0;
+  border: 1px solid rgba(61, 186, 138, 0.35);
+}
+.vx-sig-dir.bias {
+  background: rgba(196, 165, 116, 0.12);
+  color: #c4a574;
+  border: 1px solid rgba(196, 165, 116, 0.3);
+}
+.vx-sig-summary {
+  margin: 0 0 14px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: #9aa3b2;
+}
+.vx-sig-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px 12px;
+  padding-top: 12px;
+  border-top: 1px solid #1c212b;
+}
+.vx-sig-grid span {
+  display: block;
+  font-size: 10px;
+  color: #6b7385;
+  margin-bottom: 3px;
+}
+.vx-sig-grid strong {
+  font-size: 14px;
+  font-weight: 650;
+  color: #e8ecf4;
+  font-variant-numeric: tabular-nums;
+}
+@media (min-width: 900px) {
+  .sig-screen > .vx-sig-card {
+    display: inline-block;
+    vertical-align: top;
+    width: calc(33.333% - 10px);
+    margin: 0 10px 12px 0;
+  }
+}
