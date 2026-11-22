@@ -5,30 +5,26 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { TradingSignal } from "@veytrix/shared";
 import { getSignals } from "@/lib/market-data-api";
 import { PairLogo } from "./pair-logo";
-import { useMarketFeed } from "./market-watch";
-
-const DEFAULT_PAIRS = [
-  "EURUSD",
-  "GBPUSD",
-  "USDJPY",
-  "XAUUSD",
-  "AUDUSD",
-  "USDCAD",
-];
+import { useMarketFeed, useMarketFavorites } from "./market-watch";
 
 export function Dashboard() {
   const feed = useMarketFeed();
+  const { favorites } = useMarketFavorites();
   const [signals, setSignals] = useState<TradingSignal[]>([]);
   const [watchQuery, setWatchQuery] = useState("");
 
   const loadSignals = useCallback(async () => {
     try {
-      const list = await getSignals({ favorites: DEFAULT_PAIRS });
+      const pairs =
+        favorites.length > 0
+          ? favorites.map((s) => s.toUpperCase())
+          : ["EURUSD", "GBPUSD", "XAUUSD"];
+      const list = await getSignals({ favorites: pairs });
       setSignals(Array.isArray(list) ? list : []);
     } catch {
       setSignals([]);
     }
-  }, []);
+  }, [favorites]);
 
   useEffect(() => {
     void loadSignals();
@@ -42,26 +38,24 @@ export function Dashboard() {
 
   const watchRows = useMemo(() => {
     const bySym = new Map(feed.quotes.map((q) => [q.instrument, q]));
+    const favSet = new Set(favorites.map((s) => s.toUpperCase()));
+    let list = feed.instruments.filter((i) => favSet.has(i.symbol.toUpperCase()));
+
     const q = watchQuery.trim().toUpperCase();
-    let list = feed.instruments;
     if (q) {
       list = list.filter(
         (i) =>
           i.symbol.toUpperCase().includes(q) ||
           i.displayName.toUpperCase().includes(q),
       );
-    } else {
-      const preferredInst = DEFAULT_PAIRS.map((s) =>
-        list.find((i) => i.symbol === s),
-      ).filter(Boolean) as typeof list;
-      list = preferredInst.length > 0 ? preferredInst : list.slice(0, 8);
     }
-    return list.slice(0, 20).map((instrument) => {
+
+    return list.map((instrument) => {
       const quote = bySym.get(instrument.symbol);
       const last = quote?.last ?? quote?.bid ?? quote?.ask;
       return { instrument, quote, last };
     });
-  }, [feed.quotes, feed.instruments, watchQuery]);
+  }, [feed.quotes, feed.instruments, favorites, watchQuery]);
 
   return (
     <div className="home-screen">
@@ -69,7 +63,7 @@ export function Dashboard() {
         <div className="home-section-head">
           <h2>Watchlist</h2>
           <Link href="/markets" className="home-link">
-            All markets
+            Manage
           </Link>
         </div>
         <div className="home-watch-search">
@@ -77,13 +71,17 @@ export function Dashboard() {
             type="search"
             value={watchQuery}
             onChange={(e) => setWatchQuery(e.target.value)}
-            placeholder="Search pair…"
-            aria-label="Search pairs"
+            placeholder="Search favourites…"
+            aria-label="Search favourites"
           />
         </div>
         <div className="home-watch-list">
           {watchRows.length === 0 && (
-            <div className="home-empty">No pairs match</div>
+            <div className="home-empty">
+              {favorites.length === 0
+                ? "Star pairs in Markets to build your watchlist"
+                : "No pairs match"}
+            </div>
           )}
           {watchRows.map(({ instrument, quote, last }) => (
             <div key={instrument.symbol} className="home-watch-row">
