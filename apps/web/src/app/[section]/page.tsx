@@ -2,9 +2,6 @@ import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import { SectionPage } from "@/components/section-pages";
 
-export const dynamic = "force-dynamic";
-export const instant = false;
-
 const sections = new Set([
   "markets",
   "terminal",
