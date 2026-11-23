@@ -571,11 +571,11 @@ function hasFlipType2(
   );
 }
 
-function hasRecentStructureShift(
+function findRecentStructureShiftIndex(
   candles: MarketCandle[],
   direction: Direction,
-): boolean {
-  if (candles.length < 24) return false;
+): number | null {
+  if (candles.length < 24) return null;
   const start = Math.max(10, candles.length - 6);
   for (let index = candles.length - 1; index >= start; index -= 1) {
     const prior = candles.slice(0, index);
@@ -593,10 +593,10 @@ function hasRecentStructureShift(
         ? candles[index].close > level
         : candles[index].close < level)
     ) {
-      return true;
+      return index;
     }
   }
-  return false;
+  return null;
 }
 
 function isRejectionCandle(
@@ -966,10 +966,16 @@ export function analysePriceAction(
   const h1Atr = averageRange(h1.slice(-14));
   const h4Engineering = findSweep(h4, direction, h4Atr);
   const h1Engineering = findSweep(h1, direction, h1Atr);
+  const h4ShiftIndex = findRecentStructureShiftIndex(h4, direction);
+  const h1ShiftIndex = findRecentStructureShiftIndex(h1, direction);
+  const h4Aol =
+    h4ShiftIndex === null
+      ? null
+      : findFreshZones(h4, direction, h4ShiftIndex, input.price, h4Atr)[0] ?? null;
   const flipType1 = findFlipLevel(h4, direction, h4Atr, true, input.price);
   const flipType2 = hasFlipType2(h4, d1, direction);
   const ftaShiftConfirmed =
-    hasRecentStructureShift(h1, direction) &&
+    h1ShiftIndex !== null &&
     h4Structure.direction === direction;
   const tags = [
     ...(sweep
@@ -992,6 +998,8 @@ export function analysePriceAction(
     ...(flipType1 ? ["APA_FLIP_TYPE_1"] : []),
     ...(flipType2 ? ["APA_FLIP_TYPE_2_WICK_OVERLAP"] : []),
     ...(ftaShiftConfirmed ? ["APA_FTA_ENTRY_CONFIRMED"] : []),
+    ...(sweep && shiftIndex !== null && h4Aol ? ["APA_SHIFT_ENTRY_HTF_AOL"] : []),
+    ...(h4Aol ? ["CONSTANT_TIMEFRAME_AOL_TOUCHED"] : []),
     ...(zone.fill < 0.5 ? ["FRESH_ZONE_UNDER_50_PERCENT_MITIGATION"] : []),
     ...(inCorrectHalf ? [direction === "bullish" ? "DISCOUNT" : "PREMIUM"] : []),
     ...(direction === "bullish"
