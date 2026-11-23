@@ -60,7 +60,7 @@ export class FxMacroDataFundamentalsProvider implements FundamentalsProvider {
         provider: this.apiKey ? "FXMacroData" : "FXMacroData · Free USD tier",
         message: this.apiKey
           ? "Authenticated macro data · currency coverage depends on the active plan"
-          : "USD announcements · 15-minute delay · up to 100 data requests/day · other currencies require a key",
+          : "USD releases · most recent 90 days · 15-minute delay · up to 100 requests/day · paid key required for forecasts and other currencies",
         updatedAt: this.lastSuccessfulFetch ?? new Date().toISOString(),
       };
     } catch (error) {
@@ -68,7 +68,7 @@ export class FxMacroDataFundamentalsProvider implements FundamentalsProvider {
       return {
         state: "disconnected",
         provider: "FXMacroData",
-        message: `FXMacroData is unreachable: ${message}`,
+        message: `FXMacroData connectivity/data check failed: ${message}`,
       };
     }
   }
