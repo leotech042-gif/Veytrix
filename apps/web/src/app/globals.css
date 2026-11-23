@@ -497,59 +497,377 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outlin
   .fx-event-time { flex-basis:48px; }
 }
 
-
-/* Veytrix watchlist row alignment: Market + Home shared component */
-.mw-market-list { overflow:hidden; }
-.mw-list-head { min-height:38px; padding:9px 14px; }
-.mw-market-row {
-  grid-template-columns:minmax(150px,1fr) 88px minmax(112px,132px) 30px;
-  gap:14px;
-  min-height:72px;
-  padding:10px 14px;
+/* AlienAlgo-style market quotes — shared by the Market page and Home favourites */
+.mw-alienalgo-watchlist {
+  padding:18px 0 12px;
+  background:#e9eff7;
+  border:1px solid #d3ddea;
+  color:#202b3b;
+  box-shadow:0 8px 24px rgba(34,52,78,.06);
 }
-.mw-market-identity { gap:10px; }
-.mw-market-identity .pair-logo { width:48px; height:36px; }
-.mw-market-identity .pair-logo__badge { width:31px; height:31px; }
-.mw-row-spark .mw-sparkline,
-.mw-row-spark .mw-spark-empty { max-width:88px; height:30px; }
-.mw-row-quote { gap:6px; }
-.mw-row-quote > strong { font-size:14px; letter-spacing:-.15px; }
-.mw-row-quote .mw-change { min-width:64px; justify-content:center; font-size:10px; font-weight:750; }
-.mw-star { justify-self:end; width:30px; height:30px; font-size:22px; }
-.mw-compact .mw-market-row { min-height:66px; }
-.mw-compact .mw-list-head { min-height:34px; }
+.mw-alienalgo-watchlist .mw-header {
+  align-items:center;
+  margin:0 0 14px;
+  padding:0 18px;
+}
+.mw-alienalgo-watchlist .mw-eyebrow {
+  color:#718096;
+  letter-spacing:1.15px;
+}
+.mw-alienalgo-watchlist .mw-header h2 {
+  color:#202b3b;
+}
+.mw-alienalgo-watchlist .mw-subtitle {
+  color:#68778b;
+}
+.mw-alienalgo-watchlist .mw-count {
+  color:#64748b;
+}
+.mw-alienalgo-watchlist .mw-refresh {
+  color:#45566d;
+  border:1px solid #cbd6e5;
+  background:#f3f6fb;
+}
+.mw-alienalgo-watchlist .mw-refresh:hover:not(:disabled) {
+  background:#e4ebf5;
+}
+.mw-alienalgo-watchlist .mw-toolbar {
+  margin:12px 0 13px;
+  padding:0 15px;
+}
+.mw-alienalgo-watchlist .mw-search {
+  background:#f5f8fc;
+  border:1px solid #d2dce9;
+  border-radius:13px;
+  color:#52637a;
+}
+.mw-alienalgo-watchlist .mw-search input {
+  color:#253247;
+}
+.mw-alienalgo-watchlist .mw-search input::placeholder {
+  color:#8a97a8;
+}
+.mw-alienalgo-watchlist .mw-category-list {
+  gap:7px;
+  padding:0 14px 14px;
+}
+.mw-alienalgo-watchlist .mw-category-chip {
+  color:#65748a;
+  background:#edf2f8;
+  border:1px solid #d3dce8;
+  border-radius:999px;
+  padding:8px 14px;
+}
+.mw-alienalgo-watchlist .mw-category-chip strong {
+  color:inherit;
+}
+.mw-alienalgo-watchlist .mw-category-chip.active {
+  color:#36598f;
+  background:#e0e9fa;
+  border-color:#9db3dc;
+}
+.mw-alienalgo-watchlist .mw-market-list {
+  width:100%;
+  overflow:hidden;
+}
+.mw-alienalgo-watchlist .mw-list-head {
+  min-height:38px;
+  padding:10px 16px;
+  color:#77859a;
+  background:rgba(255,255,255,.18);
+  border-top:1px solid #d4deea;
+  border-bottom:1px solid #d4deea;
+  font-size:10px;
+  font-weight:800;
+  letter-spacing:1px;
+}
+.mw-alienalgo-watchlist .mw-market-row {
+  display:grid;
+  grid-template-columns:minmax(150px,1fr) 88px minmax(112px,132px) 32px;
+  align-items:center;
+  gap:13px;
+  min-height:78px;
+  padding:10px 16px;
+  background:transparent;
+  border-bottom:1px solid #d5deea;
+  transition:background .15s ease;
+}
+.mw-alienalgo-watchlist .mw-market-row:hover {
+  background:#e1e9f3;
+}
+.mw-alienalgo-watchlist .mw-market-identity {
+  display:flex;
+  align-items:center;
+  gap:10px;
+  min-width:0;
+  color:inherit;
+  text-decoration:none;
+}
+.mw-alienalgo-watchlist .mw-market-identity .pair-logo {
+  flex:0 0 50px;
+  width:50px;
+  height:38px;
+  transform:none;
+  margin:0;
+}
+.mw-alienalgo-watchlist .pair-logo__badge {
+  width:34px;
+  height:34px;
+  top:2px;
+  border:2px solid #e9eff7;
+  box-shadow:0 1px 3px rgba(34,48,68,.16);
+}
+.mw-alienalgo-watchlist .pair-logo__flag {
+  background:#f6f8fb;
+  font-size:20px;
+}
+.mw-alienalgo-watchlist .mw-instrument-copy {
+  display:flex;
+  flex-direction:column;
+  align-items:flex-start;
+  gap:4px;
+  min-width:0;
+}
+.mw-alienalgo-watchlist .mw-symbol {
+  color:#263448;
+  font-size:15px;
+  font-weight:800;
+  line-height:1.1;
+  letter-spacing:0;
+  white-space:nowrap;
+}
+.mw-alienalgo-watchlist .mw-instrument-name {
+  max-width:100%;
+  overflow:hidden;
+  color:#68778b;
+  font-size:12px;
+  line-height:1.15;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+.mw-alienalgo-watchlist .mw-row-spark {
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  min-width:0;
+}
+.mw-alienalgo-watchlist .mw-row-spark .mw-sparkline {
+  display:block;
+  width:88px;
+  max-width:88px;
+  height:30px;
+  margin:0 auto;
+}
+.mw-alienalgo-watchlist .mw-row-spark .mw-spark-empty {
+  color:#8794a6;
+  font-size:17px;
+}
+.mw-alienalgo-watchlist .mw-sparkline.is-up {
+  color:#218b73;
+}
+.mw-alienalgo-watchlist .mw-sparkline.is-down {
+  color:#cc6272;
+}
+.mw-alienalgo-watchlist .mw-row-quote {
+  display:flex;
+  justify-content:flex-end;
+  align-items:center;
+  min-width:0;
+  font-variant-numeric:tabular-nums;
+}
+.mw-alienalgo-watchlist .mw-quote-stack {
+  display:flex;
+  flex-direction:column;
+  align-items:flex-end;
+  gap:6px;
+  min-width:0;
+}
+.mw-alienalgo-watchlist .mw-quote-price {
+  color:#202b3b;
+  font-size:16px;
+  font-weight:800;
+  line-height:1;
+  white-space:nowrap;
+  letter-spacing:-.2px;
+}
+.mw-alienalgo-watchlist .mw-change {
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  min-width:58px;
+  padding:5px 8px;
+  border:0;
+  border-radius:7px;
+  font-size:11px;
+  line-height:1;
+  font-weight:800;
+}
+.mw-alienalgo-watchlist .mw-change.positive {
+  color:#287f71;
+  background:#cfe4e1;
+}
+.mw-alienalgo-watchlist .mw-change.negative {
+  color:#c15f70;
+  background:#f0d9de;
+}
+.mw-alienalgo-watchlist .mw-change.unavailable {
+  color:#748196;
+  background:#dfe6ef;
+}
+.mw-alienalgo-watchlist .mw-star {
+  display:grid;
+  place-items:center;
+  justify-self:end;
+  width:32px;
+  height:34px;
+  padding:0;
+  color:#d7a440;
+  border:0;
+  border-radius:50%;
+  background:transparent;
+  font-size:27px;
+  line-height:1;
+  cursor:pointer;
+}
+.mw-alienalgo-watchlist .mw-star.selected {
+  color:#d7a440;
+}
+.mw-alienalgo-watchlist .mw-star:hover {
+  color:#bb8523;
+  background:rgba(215,164,64,.11);
+}
+.mw-alienalgo-watchlist .mw-footnote {
+  margin:11px 16px 0;
+  color:#78869a;
+}
+.mw-alienalgo-watchlist .mw-empty,
+.mw-alienalgo-watchlist .mw-loading {
+  color:#68778b;
+}
+.mw-alienalgo-watchlist .mw-empty strong {
+  color:#27364a;
+}
+.mw-compact.mw-alienalgo-watchlist .mw-header {
+  margin-bottom:10px;
+}
+.mw-compact.mw-alienalgo-watchlist .mw-header h2 {
+  font-size:17px;
+}
+.mw-compact.mw-alienalgo-watchlist .mw-market-row {
+  min-height:72px;
+}
 
 @media (max-width:760px) {
-  .mw-market-row {
-    grid-template-columns:minmax(0,1fr) 54px minmax(86px,96px) 24px;
-    gap:6px;
+  .mw-alienalgo-watchlist {
+    padding:14px 0 10px;
+    border-radius:15px;
+  }
+  .mw-alienalgo-watchlist .mw-header {
+    gap:8px;
+    padding:0 14px;
+    margin-bottom:10px;
+  }
+  .mw-alienalgo-watchlist .mw-header h2 {
+    font-size:18px;
+  }
+  .mw-alienalgo-watchlist .mw-header-actions {
+    gap:8px;
+  }
+  .mw-alienalgo-watchlist .mw-count {
+    font-size:9px;
+  }
+  .mw-alienalgo-watchlist .mw-refresh {
+    padding:7px 9px;
+    font-size:10px;
+  }
+  .mw-alienalgo-watchlist .mw-toolbar {
+    padding:0 12px;
+    margin:11px 0 10px;
+  }
+  .mw-alienalgo-watchlist .mw-search {
+    min-height:42px;
+  }
+  .mw-alienalgo-watchlist .mw-category-list {
+    gap:7px;
+    padding:0 12px 12px;
+  }
+  .mw-alienalgo-watchlist .mw-category-chip {
+    flex:0 0 auto;
+    padding:8px 12px;
+    font-size:11px;
+  }
+  .mw-alienalgo-watchlist .mw-list-head {
+    min-height:34px;
+    padding:9px 12px;
+    font-size:9px;
+  }
+  .mw-alienalgo-watchlist .mw-market-row {
+    grid-template-columns:minmax(0,1fr) 50px minmax(88px,98px) 27px;
+    gap:7px;
     min-height:68px;
-    padding:9px 10px;
+    padding:8px 12px;
   }
-  .mw-market-identity { gap:6px; }
-  .mw-market-identity .pair-logo {
-    width:40px;
-    height:32px;
-    transform:none;
+  .mw-alienalgo-watchlist .mw-market-identity {
+    gap:7px;
   }
-  .mw-market-identity .pair-logo__badge {
-    width:28px;
-    height:28px;
-    top:2px;
+  .mw-alienalgo-watchlist .mw-market-identity .pair-logo {
+    flex-basis:46px;
+    width:46px;
+    height:34px;
+  }
+  .mw-alienalgo-watchlist .pair-logo__badge {
+    width:31px;
+    height:31px;
+    top:1px;
     border-width:1.5px;
   }
-  .mw-market-identity .pair-logo__flag { font-size:17px; }
-  .mw-market-identity .pair-logo__gold,
-  .mw-market-identity .pair-logo__silver { font-size:10px; }
-  .mw-market-identity .pair-logo__bitcoin { font-size:18px; }
-  .mw-market-identity .pair-logo__ethereum { font-size:16px; }
-  .mw-symbol { font-size:12px; }
-  .mw-instrument-name { font-size:9px; }
-  .mw-row-spark .mw-sparkline,
-  .mw-row-spark .mw-spark-empty { width:54px; max-width:54px; height:22px; }
-  .mw-row-quote { gap:4px; }
-  .mw-row-quote > strong { font-size:12px; }
-  .mw-row-quote .mw-change { min-width:0; padding:3px 5px; font-size:9px; }
-  .mw-star { width:24px; height:28px; font-size:20px; }
-  .mw-compact .mw-market-row { min-height:64px; }
+  .mw-alienalgo-watchlist .pair-logo__flag {
+    font-size:18px;
+  }
+  .mw-alienalgo-watchlist .pair-logo__gold,
+  .mw-alienalgo-watchlist .pair-logo__silver {
+    font-size:10px;
+  }
+  .mw-alienalgo-watchlist .pair-logo__bitcoin {
+    font-size:19px;
+  }
+  .mw-alienalgo-watchlist .pair-logo__ethereum {
+    font-size:17px;
+  }
+  .mw-alienalgo-watchlist .mw-instrument-copy {
+    gap:4px;
+  }
+  .mw-alienalgo-watchlist .mw-symbol {
+    font-size:14px;
+  }
+  .mw-alienalgo-watchlist .mw-instrument-name {
+    font-size:10px;
+  }
+  .mw-alienalgo-watchlist .mw-row-spark .mw-sparkline {
+    width:50px;
+    max-width:50px;
+    height:24px;
+  }
+  .mw-alienalgo-watchlist .mw-quote-stack {
+    gap:5px;
+  }
+  .mw-alienalgo-watchlist .mw-quote-price {
+    font-size:14px;
+  }
+  .mw-alienalgo-watchlist .mw-change {
+    min-width:56px;
+    padding:5px 7px;
+    font-size:10px;
+  }
+  .mw-alienalgo-watchlist .mw-star {
+    width:27px;
+    height:30px;
+    font-size:24px;
+  }
+  .mw-compact.mw-alienalgo-watchlist .mw-market-row {
+    min-height:66px;
+  }
+  .mw-alienalgo-watchlist .mw-footnote {
+    margin:10px 12px 0;
+  }
 }
