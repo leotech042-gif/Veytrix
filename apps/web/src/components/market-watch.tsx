@@ -373,7 +373,7 @@ export function MarketWatch({
   };
 
   return (
-    <section className={`panel mw-panel mw-alienalgo-watchlist${compact ? " compact-panel mw-compact" : ""}`}>
+    <section className={`panel mw-panel mw-market-watchlist${compact ? " compact-panel mw-compact" : ""}`}>
       <div className="mw-header">
         <div>
           <div className="mw-eyebrow">VEYTRIX MARKETS</div>
