@@ -4,10 +4,12 @@ import { useEffect, useMemo, useState } from "react";
 import type {
   EconomicEvent,
   FundamentalsStatus,
+  NewsIntelligence,
 } from "@veytrix/shared";
 import {
   getEconomicCalendar,
   getFundamentalsStatus,
+  getNewsIntelligence,
 } from "@/lib/fundamentals-api";
 import { MarketWatch, useMarketFeed } from "./market-watch";
 import { TradingChart } from "./trading-chart";
@@ -69,12 +71,18 @@ function fundamentalValue(value: number | null, unit?: string): string {
 function FundamentalsPage() {
   const [status, setStatus] = useState<FundamentalsStatus | null>(null);
   const [events, setEvents] = useState<EconomicEvent[]>([]);
+  const [newsIntel, setNewsIntel] = useState<NewsIntelligence | null>(null);
+  const [newsLoading, setNewsLoading] = useState(true);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [impact, setImpact] = useState<"all" | "high" | "medium" | "low">("all");
 
   useEffect(() => {
     let cancelled = false;
+    void getNewsIntelligence()
+      .then((value) => { if (!cancelled) setNewsIntel(value); })
+      .catch(() => { if (!cancelled) setNewsIntel(null); })
+      .finally(() => { if (!cancelled) setNewsLoading(false); });
     void (async () => {
       try {
         const st = await getFundamentalsStatus();
@@ -123,6 +131,63 @@ function FundamentalsPage() {
           {" "}Pair directions are event-based context, not guaranteed forecasts.
         </div>
       )}
+
+      <section className="fx-news-intelligence">
+        <div className="fx-news-heading">
+          <div>
+            <span className="mw-eyebrow">LIVE GLOBAL HEADLINES</span>
+            <h3>News intelligence</h3>
+            <p>Macro headlines mapped to currency strength and relative pair bias.</p>
+          </div>
+          <span className={"fx-news-state " + (newsIntel?.state === "connected" ? "online" : "offline")}>
+            {newsLoading ? "Updating…" : newsIntel?.state === "connected" ? "Live feed" : "Feed limited"}
+          </span>
+        </div>
+        {newsLoading && <div className="home-empty">Scanning recent financial headlines…</div>}
+        {!newsLoading && newsIntel && (
+          <>
+            <p className="fx-news-disclaimer">{newsIntel.note}</p>
+            {newsIntel.pairBiases.length > 0 && (
+              <div className="fx-news-pairs">
+                {newsIntel.pairBiases.slice(0, 12).map((pair) => (
+                  <div className="fx-news-pair" key={pair.symbol}>
+                    <strong>{pair.symbol}</strong>
+                    <span className={"fx-news-direction " + pair.bias}>{pair.bias}</span>
+                    <span className="fx-news-score">{pair.score > 0 ? "+" : ""}{pair.score.toFixed(0)}</span>
+                    <span className="fx-news-confidence">{pair.confidence}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+            <div className="fx-news-articles">
+              {newsIntel.articles.slice(0, 8).map((article) => (
+                <article className="fx-news-article" key={article.id}>
+                  <div className="fx-news-article-meta">
+                    <span className={"news-impact " + article.impact}>{article.impact}</span>
+                    <span>{article.source}</span>
+                    <span>{new Date(article.publishedAt).toLocaleString([], { dateStyle: "medium", timeStyle: "short" })}</span>
+                  </div>
+                  <a href={article.url} target="_blank" rel="noopener noreferrer">{article.title}</a>
+                  <p>{article.summary}</p>
+                  <div className="fx-news-tags">
+                    {article.currencyImpacts.map((impact) => (
+                      <span key={impact.currency} className={"fx-news-direction " + impact.bias}>
+                        {impact.currency} · {impact.bias}
+                      </span>
+                    ))}
+                  </div>
+                </article>
+              ))}
+            </div>
+            {newsIntel.articles.length === 0 && (
+              <div className="home-empty">{newsIntel.note}</div>
+            )}
+          </>
+        )}
+        {!newsLoading && !newsIntel && (
+          <div className="home-empty">News analysis is temporarily unavailable. No bias has been fabricated.</div>
+        )}
+      </section>
 
       <div className="sig-filters">
         {(["all", "high", "medium", "low"] as const).map((value) => (

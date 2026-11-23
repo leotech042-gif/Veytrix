@@ -1,16 +1,24 @@
 import { Controller, Get, Inject, Query } from "@nestjs/common";
 import { FundamentalsService } from "./fundamentals.service";
+import { NewsIntelligenceService } from "./news-intelligence.service";
 
 @Controller("fundamentals")
 export class FundamentalsController {
   constructor(
     @Inject(FundamentalsService)
     private readonly fundamentals: FundamentalsService,
+    @Inject(NewsIntelligenceService)
+    private readonly news: NewsIntelligenceService,
   ) {}
 
   @Get("status")
   getStatus() {
     return this.fundamentals.getStatus();
+  }
+
+  @Get("news")
+  getNews() {
+    return this.news.getIntelligence();
   }
 
   @Get("calendar")

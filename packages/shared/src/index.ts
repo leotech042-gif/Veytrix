@@ -119,3 +119,44 @@ export interface TradingSignal {
   marketOpen?: boolean;
   leanScore?: number;
 }
+
+export type NewsDirection = "bullish" | "bearish" | "neutral";
+export type NewsImpact = "high" | "medium" | "low";
+export type NewsConfidence = "low" | "moderate" | "high";
+
+export interface NewsCurrencyImpact {
+  currency: string;
+  bias: NewsDirection;
+  score: number;
+  reason: string;
+}
+
+export interface NewsArticleAnalysis {
+  id: string;
+  title: string;
+  url: string;
+  source: string;
+  publishedAt: string;
+  impact: NewsImpact;
+  currencies: string[];
+  currencyImpacts: NewsCurrencyImpact[];
+  summary: string;
+}
+
+export interface NewsPairBias {
+  symbol: string;
+  bias: NewsDirection;
+  score: number;
+  confidence: NewsConfidence;
+  articleCount: number;
+  summary: string;
+}
+
+export interface NewsIntelligence {
+  provider: string;
+  state: "connected" | "degraded";
+  updatedAt: string;
+  articles: NewsArticleAnalysis[];
+  pairBiases: NewsPairBias[];
+  note: string;
+}
