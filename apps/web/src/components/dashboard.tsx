@@ -1,224 +1,179 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { TradingSignal } from "@veytrix/shared";
 import { getSignals } from "@/lib/market-data-api";
-import { AiOrb } from "./ai-orb";
-import { MarketWatch, useMarketFeed } from "./market-watch";
-
-function greeting() {
-  const h = new Date().getHours();
-  if (h < 12) return "Good morning";
-  if (h < 18) return "Good afternoon";
-  return "Good evening";
-}
+import { PairLogo } from "./pair-logo";
+import { useMarketFeed, useMarketFavorites } from "./market-watch";
 
 export function Dashboard() {
   const feed = useMarketFeed();
+  const { favorites } = useMarketFavorites();
   const [signals, setSignals] = useState<TradingSignal[]>([]);
-  const [scanning, setScanning] = useState(false);
-  const [scanDone, setScanDone] = useState(false);
+  const [watchQuery, setWatchQuery] = useState("");
 
-  const runScan = useCallback(async () => {
-    setScanning(true);
-    setScanDone(false);
+  const loadSignals = useCallback(async () => {
     try {
-      const favs = feed.instruments.slice(0, 6).map((i) => i.symbol);
-      const list = await getSignals({ favorites: favs });
-      setSignals(list);
-      setScanDone(true);
+      const pairs =
+        favorites.length > 0
+          ? favorites.map((s) => s.toUpperCase())
+          : ["EURUSD", "GBPUSD", "XAUUSD"];
+      const list = await getSignals({ favorites: pairs });
+      setSignals(Array.isArray(list) ? list : []);
     } catch {
       setSignals([]);
-    } finally {
-      setScanning(false);
     }
-  }, [feed.instruments]);
+  }, [favorites]);
 
   useEffect(() => {
-    if (feed.status?.state === "connected" && feed.instruments.length > 0) {
-      void runScan();
+    void loadSignals();
+  }, [loadSignals]);
+
+  const biases = useMemo(
+    () => signals.filter((s) => s.type === "bias" || s.type === "setup"),
+    [signals],
+  );
+  const topBias = biases[0];
+
+  const watchRows = useMemo(() => {
+    const bySym = new Map(feed.quotes.map((q) => [q.instrument, q]));
+    const favSet = new Set(favorites.map((s) => s.toUpperCase()));
+    let list = feed.instruments.filter((i) =>
+      favSet.has(i.symbol.toUpperCase()),
+    );
+
+    const q = watchQuery.trim().toUpperCase();
+    if (q) {
+      list = list.filter(
+        (i) =>
+          i.symbol.toUpperCase().includes(q) ||
+          i.displayName.toUpperCase().includes(q),
+      );
     }
-  }, [feed.status?.state, feed.instruments.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const latestSetup = signals.find((s) => s.type === "setup");
-  const setups = signals.filter((s) => s.type === "setup").length;
-  const biases = signals.filter((s) => s.type === "bias").length;
+    return list.map((instrument) => {
+      const quote = bySym.get(instrument.symbol);
+      const last = quote?.last ?? quote?.bid ?? quote?.ask;
+      return { instrument, quote, last };
+    });
+  }, [feed.quotes, feed.instruments, favorites, watchQuery]);
 
-  const providerLabel =
-    feed.loading
-      ? "Checking…"
-      : feed.status?.state === "connected"
-        ? feed.status.provider
-        : feed.status?.state === "disconnected"
-          ? "Disconnected"
-          : feed.error
-            ? "Offline"
-            : "Not set";
+  const connected = feed.status?.state === "connected";
 
   return (
-    <>
-      <p className="greeting">{greeting()}</p>
-
-      <section className="hero-card mb-4">
-        <div className="flex-between">
+    <div className="home-screen">
+      <section className="feed-status-card">
+        <div className="feed-status-main">
+          <span className="feed-status-label">Market feed</span>
+          <strong className="feed-status-value">
+            {feed.loading
+              ? "…"
+              : connected
+                ? (feed.status?.provider ?? "Live")
+                : "Not linked"}
+          </strong>
+          <span className="feed-status-note">
+            {connected
+              ? feed.status?.delayed
+                ? "Delayed quotes"
+                : "Live · real data"
+              : "Start API + set TIINGO_API_KEY"}
+          </span>
+        </div>
+        <div className="feed-status-stats">
           <div>
-            <div className="balance-label">Feed</div>
-            <div className="balance-value" style={{ fontSize: 22 }}>
-              {providerLabel}
-            </div>
-            <div className="balance-delta">
-              {feed.status?.state === "connected"
-                ? feed.status.delayed
-                  ? "Delayed"
-                  : "Live"
-                : "No provider"}
-            </div>
+            <span>Pairs</span>
+            <strong>{connected ? feed.instruments.length : "—"}</strong>
           </div>
-          <AiOrb
-            variant={
-              scanning
-                ? "scanning"
-                : feed.status?.state === "connected"
-                  ? "idle"
-                  : "loading"
-            }
-            size="md"
+          <div>
+            <span>Quotes</span>
+            <strong>{connected ? feed.quotes.length : "—"}</strong>
+          </div>
+          <div>
+            <span>Mode</span>
+            <strong>Live</strong>
+          </div>
+        </div>
+      </section>
+
+      <section className="home-section">
+        <div className="home-section-head">
+          <h2>Watchlist</h2>
+          <Link href="/markets" className="home-link">
+            Manage
+          </Link>
+        </div>
+        <div className="home-watch-search">
+          <input
+            type="search"
+            value={watchQuery}
+            onChange={(e) => setWatchQuery(e.target.value)}
+            placeholder="Search favourites…"
+            aria-label="Search favourites"
           />
         </div>
-        <div className="balance-meta">
-          <div className="meta-item">
-            <span className="label">Pairs</span>
-            <span className="value">
-              {feed.status?.state === "connected" ? feed.instruments.length : "—"}
-            </span>
-          </div>
-          <div className="meta-item">
-            <span className="label">Quotes</span>
-            <span className="value">
-              {feed.status?.state === "connected" ? feed.quotes.length : "—"}
-            </span>
-          </div>
-          <div className="meta-item">
-            <span className="label">Broker</span>
-            <span className="value">Off</span>
-          </div>
-        </div>
-      </section>
-
-      {feed.error && (
-        <div className="inline-error" role="alert">
-          {feed.error}
-        </div>
-      )}
-
-      <section className="scan-card mb-4">
-        <AiOrb
-          variant={scanning ? "analyzing" : scanDone ? "idle" : "loading"}
-          size="sm"
-        />
-        <div className="scan-info">
-          <p className="scan-title">Scan</p>
-          <p className="scan-sub">
-            {scanning
-              ? "Reading structure…"
-              : scanDone
-                ? `${setups} setup · ${biases} bias`
-                : "Tap to scan"}
-          </p>
-        </div>
-        {scanDone && !scanning && <span className="scan-badge">Live</span>}
-      </section>
-
-      <button
-        type="button"
-        className="primary-button btn-full mb-4"
-        onClick={() => void runScan()}
-        disabled={scanning || feed.status?.state !== "connected"}
-      >
-        {scanning ? "Scanning…" : scanDone ? "Scan again" : "Scan"}
-      </button>
-
-      <section className="panel mb-4">
-        <div className="panel-heading">
-          <div>
-            <h2>Watchlist</h2>
-          </div>
-          <Link className="text-button" href="/markets">
-            All
-          </Link>
-        </div>
-        <MarketWatch feed={feed} favoritesOnly compact />
-      </section>
-
-      <section className="panel">
-        <div className="panel-heading">
-          <div>
-            <h2>Signal</h2>
-          </div>
-          <Link className="text-button" href="/signals">
-            Room
-          </Link>
-        </div>
-
-        {latestSetup ? (
-          <article
-            className="signal-card"
-            style={{ marginBottom: 0, border: "none", padding: 0 }}
-          >
-            <div className="signal-header">
-              <span className="signal-pair">{latestSetup.instrument}</span>
-              <span
-                className={`signal-dir ${
-                  latestSetup.direction === "bullish"
-                    ? "buy"
-                    : latestSetup.direction === "bearish"
-                      ? "sell"
-                      : "bias"
-                }`}
-              >
-                {latestSetup.direction === "bullish"
-                  ? "BUY"
-                  : latestSetup.direction === "bearish"
-                    ? "SELL"
-                    : "BIAS"}
+        <div className="home-watch-list">
+          {watchRows.length === 0 && (
+            <div className="home-empty">
+              {favorites.length === 0
+                ? "Star pairs in Markets to build your watchlist"
+                : "No pairs match"}
+            </div>
+          )}
+          {watchRows.map(({ instrument, quote, last }) => (
+            <div key={instrument.symbol} className="home-watch-row">
+              <PairLogo symbol={instrument.symbol} size="sm" />
+              <span className="home-watch-meta">
+                <strong>{instrument.symbol}</strong>
+                <span>{instrument.displayName}</span>
+              </span>
+              <span className="home-watch-px">
+                <strong>
+                  {last != null
+                    ? last.toLocaleString(undefined, {
+                        maximumFractionDigits: 5,
+                      })
+                    : "—"}
+                </strong>
               </span>
             </div>
-            <p className="signal-meta">
-              {latestSetup.timeframe} · {latestSetup.confidence}%
-              {latestSetup.riskReward ? ` · 1:${latestSetup.riskReward}` : ""}
-            </p>
-            {latestSetup.entry != null && (
-              <div className="signal-levels">
-                <div className="level">
-                  <span className="lbl">Entry</span>
-                  <span className="val">{latestSetup.entry}</span>
-                </div>
-                <div className="level">
-                  <span className="lbl">Stop</span>
-                  <span className="val">{latestSetup.stopLoss ?? "—"}</span>
-                </div>
-                <div className="level">
-                  <span className="lbl">Target</span>
-                  <span className="val">{latestSetup.takeProfit ?? "—"}</span>
-                </div>
-              </div>
-            )}
-            {latestSetup.summary ? (
-              <p className="signal-reason">{latestSetup.summary}</p>
-            ) : null}
-          </article>
+          ))}
+        </div>
+      </section>
+
+      <section className="home-section">
+        <div className="home-section-head">
+          <h2>Bias</h2>
+          <Link href="/signals" className="home-link">
+            View all
+          </Link>
+        </div>
+        {topBias ? (
+          <Link href="/signals" className="home-signal-card">
+            <PairLogo symbol={topBias.instrument} size="sm" />
+            <span className="home-signal-body">
+              <strong>
+                {topBias.instrument} ·{" "}
+                {topBias.direction === "bullish"
+                  ? "Bullish"
+                  : topBias.direction === "bearish"
+                    ? "Bearish"
+                    : "Neutral"}
+              </strong>
+              <span>
+                {topBias.timeframe}
+                {topBias.type === "setup" && topBias.riskReward
+                  ? ` · 1:${topBias.riskReward} RR`
+                  : " · bias"}
+              </span>
+            </span>
+            <span className="home-signal-chevron">›</span>
+          </Link>
         ) : (
-          <div className="empty-state">
-            <div className="mark">⌖</div>
-            <p>
-              {feed.status?.state === "connected"
-                ? "No setup right now"
-                : "Connect a provider"}
-            </p>
-          </div>
+          <div className="home-empty">No bias right now</div>
         )}
       </section>
-    </>
+    </div>
   );
 }

@@ -1,20 +1,11 @@
 "use client";
 
-import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import type { ChartTimeframe, MarketInstrument } from "@veytrix/shared";
 import { useHydrated, usePreferences } from "./theme-provider";
 import { useMarketFavorites } from "./market-watch";
 
-const timeframes: ChartTimeframe[] = [
-  "M1",
-  "M5",
-  "M15",
-  "M30",
-  "H1",
-  "H4",
-  "D1",
-  "W1",
-];
+const timeframes: ChartTimeframe[] = ["M1", "M5", "M15", "M30", "H1", "H4", "D1", "W1"];
 
 const tradingViewIntervals: Record<ChartTimeframe, string> = {
   M1: "1",
@@ -46,11 +37,9 @@ const tradingViewAliases: Record<string, string> = {
 
 function toTradingViewSymbol(instrument?: MarketInstrument): string {
   if (!instrument) return "";
-
   const symbol = instrument.symbol.trim().toUpperCase();
   if (symbol.includes(":")) return symbol;
   if (tradingViewAliases[symbol]) return tradingViewAliases[symbol];
-
   const normalized = symbol.replace(/[\s/]/g, "");
   if (instrument.category === "forex") return `FX:${normalized}`;
   if (instrument.category === "metals") return `OANDA:${normalized}`;
@@ -93,10 +82,26 @@ export function TradingChart({
   compact?: boolean;
 }) {
   const panelRef = useRef<HTMLElement>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
   const widgetRef = useRef<HTMLDivElement>(null);
-  const [selectedInstrument, setSelectedInstrument] =
-    useState(initialInstrument);
+  const { favorites } = useMarketFavorites();
+
+  const list = useMemo(() => {
+    const favSet = new Set(favorites.map((s) => s.toUpperCase()));
+    const favs = instruments.filter((i) => favSet.has(i.symbol.toUpperCase()));
+    if (favs.length > 0) return favs;
+    if (instruments.length > 0) return instruments.slice(0, 6);
+    return [
+      {
+        symbol: "EURUSD",
+        displayName: "Euro / US Dollar",
+        category: "forex" as const,
+      },
+    ];
+  }, [instruments, favorites]);
+
+  const [selectedInstrument, setSelectedInstrument] = useState(
+    initialInstrument || list[0]?.symbol || "EURUSD",
+  );
   const [selectedTimeframe, setSelectedTimeframe] =
     useState<ChartTimeframe | null>(null);
   const [fullScreen, setFullScreen] = useState(false);
@@ -106,41 +111,30 @@ export function TradingChart({
 
   const hydrated = useHydrated();
   const { preferences, updatePreferences } = usePreferences();
-  const { favorites } = useMarketFavorites();
   const resolvedTheme = useSyncExternalStore(
     subscribeToResolvedTheme,
     getResolvedTheme,
     getServerTheme,
   );
 
-  const favoriteInstruments = instruments.filter((instrument) =>
-    favorites.includes(instrument.symbol),
-  );
-  // Keep favourites as the preferred chart list, but never leave the chart
-  // without a symbol when the user has not starred any instruments yet.
-  const chartInstruments =
-    favoriteInstruments.length > 0 ? favoriteInstruments : instruments;
-  const activeInstrument = chartInstruments.some(
-    (instrument) => instrument.symbol === selectedInstrument,
-  )
+  const activeInstrument = list.some((i) => i.symbol === selectedInstrument)
     ? selectedInstrument
-    : chartInstruments.some(
-          (instrument) => instrument.symbol === initialInstrument,
-        )
+    : list.some((i) => i.symbol === initialInstrument)
       ? initialInstrument
-      : (chartInstruments[0]?.symbol ?? "");
-  const instrument = chartInstruments.find(
-    (item) => item.symbol === activeInstrument,
-  );
+      : (list[0]?.symbol ?? "EURUSD");
+
+  const instrument =
+    list.find((item) => item.symbol === activeInstrument) ?? list[0];
   const symbol = toTradingViewSymbol(instrument);
   const timeframe =
-    selectedTimeframe ??
-    (hydrated ? preferences.defaultTimeframe : "H1");
+    selectedTimeframe ?? (hydrated ? preferences.defaultTimeframe : "H1");
   const showVolume = hydrated ? preferences.showVolume : false;
   const showSma = hydrated ? preferences.showSma : false;
   const showEma = hydrated ? preferences.showEma : false;
   const chartBackground =
-    resolvedTheme === "light" ? "#ffffff" : preferences.chartBackground;
+    resolvedTheme === "light"
+      ? "#ffffff"
+      : preferences.chartBackground || "#0a0a0a";
   const gridColor = resolvedTheme === "light" ? "#dce2e9" : "#202a37";
   const widgetKey = JSON.stringify([
     symbol,
@@ -159,13 +153,17 @@ export function TradingChart({
     widgetLoadResult?.key === widgetKey
       ? (widgetLoadResult.error ?? null)
       : null;
+
   useEffect(() => {
-    const container = containerRef.current;
     const widget = widgetRef.current;
-    if (!container || !widget || !symbol) return;
+    if (!widget || !symbol) return;
 
     let active = true;
-    widget.replaceChildren();
+    const embedContainer = document.createElement("div");
+    embedContainer.className = "tradingview-widget-container";
+    embedContainer.style.width = "100%";
+    embedContainer.style.height = "100%";
+    widget.replaceChildren(embedContainer);
 
     const studies = [
       ...(showSma ? ["MASimple@tv-basicstudies"] : []),
@@ -182,7 +180,7 @@ export function TradingChart({
       symbol,
       interval: tradingViewIntervals[timeframe],
       timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-      theme: resolvedTheme,
+      theme: resolvedTheme === "light" ? "light" : "dark",
       style: "1",
       locale: "en",
       allow_symbol_change: false,
@@ -212,16 +210,15 @@ export function TradingChart({
       if (active) {
         setWidgetLoadResult({
           key: widgetKey,
-          error: "The Veytrix chart could not be loaded.",
+          error: "Chart could not load. Check network.",
         });
       }
     };
-    container.appendChild(script);
+    embedContainer.appendChild(script);
 
     return () => {
       active = false;
-      script.remove();
-      widget.replaceChildren();
+      embedContainer.remove();
     };
   }, [
     chartBackground,
@@ -248,17 +245,14 @@ export function TradingChart({
   const toggleFullScreen = () => {
     const panel = panelRef.current;
     if (!panel) return;
-
     if (document.fullscreenElement === panel) {
       void document.exitFullscreen();
       return;
     }
-
     if (fullScreen || typeof panel.requestFullscreen !== "function") {
       setFullScreen((current) => !current);
       return;
     }
-
     void panel.requestFullscreen().catch(() => setFullScreen(true));
   };
 
@@ -269,47 +263,39 @@ export function TradingChart({
         fullScreen ? " chart-fullscreen" : ""
       }`}
     >
-      <div className="chart-toolbar">
-        <label className="select-field">
-          <span>Instrument</span>
-          <select
-            value={activeInstrument}
-            onChange={(event) => setSelectedInstrument(event.target.value)}
-          >
-            {chartInstruments.length === 0 && (
-              <option value="">No instruments available</option>
-            )}
-            {chartInstruments.map((item) => (
-              <option key={item.symbol} value={item.symbol}>
-                {item.symbol}
-              </option>
-            ))}
-          </select>
-        </label>
-
-        <div className="terminal-periods" role="group" aria-label="Timeframe">
-          {timeframes.map((item) => (
-            <button
-              key={item}
-              type="button"
-              className={`timeframe-button${
-                timeframe === item ? " active" : ""
-              }`}
-              onClick={() => setSelectedTimeframe(item)}
-            >
-              {item}
-            </button>
+      <div className="chart-toolbar chart-toolbar-compact">
+        <select
+          className="chart-select"
+          value={activeInstrument}
+          onChange={(e) => setSelectedInstrument(e.target.value)}
+          aria-label="Instrument"
+        >
+          {list.map((item) => (
+            <option key={item.symbol} value={item.symbol}>
+              {item.symbol}
+            </option>
           ))}
-        </div>
+        </select>
+
+        <select
+          className="chart-select"
+          value={timeframe}
+          onChange={(e) => setSelectedTimeframe(e.target.value as ChartTimeframe)}
+          aria-label="Timeframe"
+        >
+          {timeframes.map((tf) => (
+            <option key={tf} value={tf}>
+              {tf}
+            </option>
+          ))}
+        </select>
 
         <div className="chart-indicator-toggles">
           <label>
             <input
               type="checkbox"
               checked={showSma}
-              onChange={(event) =>
-                updatePreferences({ showSma: event.target.checked })
-              }
+              onChange={(e) => updatePreferences({ showSma: e.target.checked })}
             />
             MA
           </label>
@@ -317,9 +303,7 @@ export function TradingChart({
             <input
               type="checkbox"
               checked={showEma}
-              onChange={(event) =>
-                updatePreferences({ showEma: event.target.checked })
-              }
+              onChange={(e) => updatePreferences({ showEma: e.target.checked })}
             />
             EMA
           </label>
@@ -327,74 +311,44 @@ export function TradingChart({
             <input
               type="checkbox"
               checked={showVolume}
-              onChange={(event) =>
-                updatePreferences({ showVolume: event.target.checked })
+              onChange={(e) =>
+                updatePreferences({ showVolume: e.target.checked })
               }
             />
-            Volume
+            Vol
           </label>
         </div>
 
-        <div className="chart-toolbar-actions">
-          <button
-            type="button"
-            className="secondary-button"
-            onClick={() => setReloadToken((token) => token + 1)}
-          >
-            Reload
-          </button>
-          <button
-            type="button"
-            className="secondary-button"
-            onClick={toggleFullScreen}
-            aria-pressed={fullScreen}
-            aria-label={fullScreen ? "Exit full screen" : "View full screen"}
-          >
-            {fullScreen ? "Exit" : "Full"}
-          </button>
-        </div>
+        <button
+          type="button"
+          className="secondary-button chart-tool-btn"
+          onClick={() => setReloadToken((t) => t + 1)}
+        >
+          Reload
+        </button>
+        <button
+          type="button"
+          className="secondary-button chart-tool-btn"
+          onClick={toggleFullScreen}
+          aria-pressed={fullScreen}
+        >
+          {fullScreen ? "Exit" : "Full"}
+        </button>
       </div>
 
       <div className="chart-canvas-wrap">
-        <div
-          className="chart-canvas"
-          aria-label="Veytrix interactive chart"
-        >
+        <div className="chart-canvas" aria-label="Veytrix chart">
           <div
-            className="tradingview-widget-container"
-            ref={containerRef}
-            style={{ width: "100%", height: "100%" }}
-          >
-            <div
-              className="tradingview-widget-container__widget"
-              ref={widgetRef}
-              style={{ width: "100%", height: "100%" }}
-            />
-          </div>
+            className="tradingview-widget-container__widget"
+            ref={widgetRef}
+            style={{ width: "100%", height: "100%", minHeight: 420 }}
+          />
         </div>
-        {(loading || error || !symbol) && (
+        {(loading || error) && (
           <div className="chart-overlay" role={error ? "alert" : "status"}>
-            <span className="chart-placeholder-icon" aria-hidden="true">
-              {error ? "⌁" : "…"}
-            </span>
-            <strong>
-              {!symbol
-                ? "Star an instrument in Markets to see its chart here."
-                : loading
-                  ? "Loading Veytrix chart…"
-                  : "Veytrix chart unavailable"}
-            </strong>
-            {error && <span>{error}</span>}
+            <strong>{error ? error : "Loading chart…"}</strong>
           </div>
         )}
-      </div>
-
-      <div className="chart-data-footer">
-        <span>
-          {instrument
-            ? `Veytrix · ${instrument.symbol} · ${instrument.displayName}`
-            : "Veytrix chart"}
-        </span>
       </div>
     </section>
   );

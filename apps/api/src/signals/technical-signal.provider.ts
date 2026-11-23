@@ -38,14 +38,16 @@ interface Zone {
   top: number;
   bottom: number;
   mid: number;
-  kind: "ob" | "fvg" | "sr" | "breaker" | "fib";
+  kind: "ob" | "fvg" | "sr" | "breaker" | "fib" | "liquidity" | "supply" | "demand" | "trendline" | "channel" | "liquidity-sweep" ;
   direction: "bullish" | "bearish";
 }
 
 interface SetupResult {
   entry: number;
   stopLoss: number;
-  takeProfit: number;
+  takeProfit1: number;
+  takeProfit2: number;
+  takeProfit3: number;
   riskReward: number;
   timeframe: ChartTimeframe;
   tags: string[];
@@ -322,7 +324,7 @@ export class TechnicalSignalProvider implements SignalProvider {
       if (!setup) continue;
       const score =
         setup.tags.length * 10 +
-        setup.riskReward * 4 +
+        setup.riskReward * 5 +
         (frame.tf === "M5"
           ? 3
           : frame.tf === "M15"
@@ -344,7 +346,7 @@ export class TechnicalSignalProvider implements SignalProvider {
     ) {
       confidence = Math.min(
         96,
-        confidence + bestSetup.tags.length * 3 + (bestSetup.riskReward - 2) * 4,
+        confidence + bestSetup.tags.length * 3 + (bestSetup.riskReward - 2) * 5,
       );
       reasons.push(
         `Entry ${bestSetup.timeframe}: ${bestSetup.tags.join(" + ")}`,
@@ -362,7 +364,9 @@ export class TechnicalSignalProvider implements SignalProvider {
         summary: `${reasons.join(". ")}. ${sessionNote}`,
         entry: bestSetup.entry,
         stopLoss: bestSetup.stopLoss,
-        takeProfit: bestSetup.takeProfit,
+        takeProfit1: bestSetup.takeProfit1,
+        takeProfit2: bestSetup.takeProfit2,
+        takeProfit3: bestSetup.takeProfit3,
         riskReward: bestSetup.riskReward,
         createdAt: now,
         ...({ marketOpen } as object),
@@ -808,7 +812,9 @@ export class TechnicalSignalProvider implements SignalProvider {
     return {
       entry,
       stopLoss,
-      takeProfit,
+      takeProfit1: takeProfit,
+      takeProfit2: takeProfit,
+      takeProfit3: takeProfit,
       riskReward: finalRr,
       timeframe,
       tags,
