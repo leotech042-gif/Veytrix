@@ -5,13 +5,12 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { TradingSignal } from "@veytrix/shared";
 import { getSignals } from "@/lib/market-data-api";
 import { PairLogo } from "./pair-logo";
-import { useMarketFeed, useMarketFavorites } from "./market-watch";
+import { MarketWatch, useMarketFeed, useMarketFavorites } from "./market-watch";
 
 export function Dashboard() {
   const feed = useMarketFeed();
   const { favorites } = useMarketFavorites();
   const [signals, setSignals] = useState<TradingSignal[]>([]);
-  const [watchQuery, setWatchQuery] = useState("");
 
   const loadSignals = useCallback(async () => {
     try {
@@ -35,29 +34,6 @@ export function Dashboard() {
     [signals],
   );
   const topBias = biases[0];
-
-  const watchRows = useMemo(() => {
-    const bySym = new Map(feed.quotes.map((q) => [q.instrument, q]));
-    const favSet = new Set(favorites.map((s) => s.toUpperCase()));
-    let list = feed.instruments.filter((i) =>
-      favSet.has(i.symbol.toUpperCase()),
-    );
-
-    const q = watchQuery.trim().toUpperCase();
-    if (q) {
-      list = list.filter(
-        (i) =>
-          i.symbol.toUpperCase().includes(q) ||
-          i.displayName.toUpperCase().includes(q),
-      );
-    }
-
-    return list.map((instrument) => {
-      const quote = bySym.get(instrument.symbol);
-      const last = quote?.last ?? quote?.bid ?? quote?.ask;
-      return { instrument, quote, last };
-    });
-  }, [feed.quotes, feed.instruments, favorites, watchQuery]);
 
   const connected = feed.status?.state === "connected";
 
@@ -97,50 +73,7 @@ export function Dashboard() {
         </div>
       </section>
 
-      <section className="home-section">
-        <div className="home-section-head">
-          <h2>Watchlist</h2>
-          <Link href="/markets" className="home-link">
-            Manage
-          </Link>
-        </div>
-        <div className="home-watch-search">
-          <input
-            type="search"
-            value={watchQuery}
-            onChange={(e) => setWatchQuery(e.target.value)}
-            placeholder="Search favourites…"
-            aria-label="Search favourites"
-          />
-        </div>
-        <div className="home-watch-list">
-          {watchRows.length === 0 && (
-            <div className="home-empty">
-              {favorites.length === 0
-                ? "Star pairs in Markets to build your watchlist"
-                : "No pairs match"}
-            </div>
-          )}
-          {watchRows.map(({ instrument, quote, last }) => (
-            <div key={instrument.symbol} className="home-watch-row">
-              <PairLogo symbol={instrument.symbol} size="sm" />
-              <span className="home-watch-meta">
-                <strong>{instrument.symbol}</strong>
-                <span>{instrument.displayName}</span>
-              </span>
-              <span className="home-watch-px">
-                <strong>
-                  {last != null
-                    ? last.toLocaleString(undefined, {
-                        maximumFractionDigits: 5,
-                      })
-                    : "—"}
-                </strong>
-              </span>
-            </div>
-          ))}
-        </div>
-      </section>
+      <MarketWatch feed={feed} favoritesOnly compact />
 
       <section className="home-section">
         <div className="home-section-head">
