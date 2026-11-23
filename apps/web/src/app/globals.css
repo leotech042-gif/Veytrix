@@ -380,7 +380,7 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outlin
 }
 
 
-/* Paired market identity marks and AlienAlgo-inspired compact watchlist rows */
+/* Paired market identity marks and compact watchlist rows */
 .pair-logo { display:inline-flex; align-items:center; position:relative; flex:0 0 auto; width:52px; height:38px; }
 .pair-logo--sm { width:42px; height:30px; }
 .pair-logo__badge { position:absolute; top:2px; width:34px; height:34px; display:grid; place-items:center; border:2px solid var(--surface); border-radius:50%; overflow:hidden; line-height:1; box-shadow:0 1px 3px rgba(0,0,0,.14); }
