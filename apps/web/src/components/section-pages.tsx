@@ -109,9 +109,6 @@ function FundamentalsPage() {
           setLoading(false);
           return;
         }
-        const cal = await getEconomicCalendar();
-        if (cancelled) return;
-        setEvents(Array.isArray(cal) ? cal : []);
         setError(null);
       } catch (reason) {
         if (!cancelled) {
@@ -125,6 +122,27 @@ function FundamentalsPage() {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+    const window = localDayWindow(selectedDate);
+    void getEconomicCalendar(window.from, window.to)
+      .then((calendar) => {
+        if (!cancelled) setEvents(Array.isArray(calendar) ? calendar : []);
+      })
+      .catch((reason) => {
+        if (!cancelled) {
+          setEvents([]);
+          setError(reason instanceof Error ? reason.message : "Economic calendar could not be loaded.");
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [selectedDate]);
 
   useEffect(() => {
     let cancelled = false;
