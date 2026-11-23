@@ -30,7 +30,7 @@ export class FxMacroDataFundamentalsProvider implements FundamentalsProvider {
   private readonly apiKey = process.env.FXMACRODATA_API_KEY?.trim() || null;
   // The anonymous tier is limited to 100 data requests per day. Cache the two
   // USD endpoints for 30 minutes so normal page refreshes do not burn quota.
-  private readonly cacheMs = 30 * 60_000;
+  private readonly cacheMs = 45 * 60_000;
   private cache: CachedCalendar | null = null;
   private lastFetchError: string | null = null;
   private lastSuccessfulFetch: string | null = null;
@@ -47,6 +47,7 @@ export class FxMacroDataFundamentalsProvider implements FundamentalsProvider {
           message: `FXMacroData health check failed (HTTP ${response.status}).`,
         };
       }
+      await this.getCalendar();
       if (this.lastFetchError) {
         return {
           state: "disconnected",
@@ -192,7 +193,7 @@ export class FxMacroDataFundamentalsProvider implements FundamentalsProvider {
       output.push({
         id,
         time,
-        country: currency,
+        country: this.countryForCurrency(currency),
         currency,
         event: label,
         impact,
@@ -365,7 +366,23 @@ export class FxMacroDataFundamentalsProvider implements FundamentalsProvider {
     ]);
     if (high.has(indicator)) return "high";
     if (medium.has(indicator)) return "medium";
-    return "low";
+    return "unknown";
+  }
+
+  private countryForCurrency(currency: string): string {
+    const countries: Record<string, string> = {
+      USD: "United States",
+      EUR: "Euro Area",
+      GBP: "United Kingdom",
+      JPY: "Japan",
+      AUD: "Australia",
+      CAD: "Canada",
+      CHF: "Switzerland",
+      NZD: "New Zealand",
+      CNY: "China",
+      CNH: "China (offshore)",
+    };
+    return countries[currency] ?? currency;
   }
 
   private indicatorLabel(indicator: string): string {
