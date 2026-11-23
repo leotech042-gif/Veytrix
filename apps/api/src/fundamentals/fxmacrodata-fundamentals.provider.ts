@@ -239,7 +239,7 @@ export class FxMacroDataFundamentalsProvider implements FundamentalsProvider {
       output.push({
         id: `${currency}-${indicator}-${timestamp}`,
         time: timestamp,
-        country: currency,
+        country: this.countryForCurrency(currency),
         currency,
         event: label,
         impact,
