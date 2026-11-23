@@ -68,6 +68,17 @@ function fundamentalValue(value: number | null, unit?: string): string {
   return `${value.toLocaleString(undefined, { maximumFractionDigits: 4 })}${unit ? ` ${unit}` : ""}`;
 }
 
+function localDateKey(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return year + "-" + month + "-" + day;
+}
+
+function shiftDateKey(dateKey: string, days: number): string {
+  const [year, month, day] = dateKey.split("-").map(Number);
+  return localDateKey(new Date(year, month - 1, day + days));
+}
 function FundamentalsPage() {
   const [status, setStatus] = useState<FundamentalsStatus | null>(null);
   const [events, setEvents] = useState<EconomicEvent[]>([]);
@@ -76,6 +87,9 @@ function FundamentalsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [impact, setImpact] = useState<"all" | "high" | "medium" | "low">("all");
+  const [selectedDate, setSelectedDate] = useState(() => localDateKey(new Date()));
+  const todayKey = localDateKey(new Date());
+  const selectedDateLabel = new Date(Number(selectedDate.slice(0, 4)), Number(selectedDate.slice(5, 7)) - 1, Number(selectedDate.slice(8, 10))).toLocaleDateString([], { weekday: "long", day: "numeric", month: "long", year: "numeric" });
 
   useEffect(() => {
     let cancelled = false;
@@ -110,9 +124,14 @@ function FundamentalsPage() {
   }, []);
 
   const filtered = useMemo(() => {
-    const list = impact === "all" ? events : events.filter((event) => event.impact === impact);
-    return list.slice(0, 60);
-  }, [events, impact]);
+    return events
+      .filter((event) => {
+        const time = new Date(event.time);
+        return Number.isFinite(time.getTime()) && localDateKey(time) === selectedDate;
+      })
+      .filter((event) => impact === "all" || event.impact === impact)
+      .slice(0, 60);
+  }, [events, impact, selectedDate]);
 
   return (
     <div className="news-screen fx-fundamentals">
@@ -189,6 +208,19 @@ function FundamentalsPage() {
         )}
       </section>
 
+      <section className="fx-calendar-day-nav" aria-label="Economic calendar date">
+        <div className="fx-calendar-day-copy">
+          <span className="mw-eyebrow">ECONOMIC CALENDAR</span>
+          <strong>{selectedDate === todayKey ? "Today" : selectedDateLabel}</strong>
+          <span>{selectedDateLabel}</span>
+        </div>
+        <div className="fx-calendar-day-actions">
+          <button type="button" onClick={() => setSelectedDate((date) => shiftDateKey(date, -1))}>← Previous day</button>
+          <button type="button" className={selectedDate === todayKey ? "active" : ""} onClick={() => setSelectedDate(todayKey)}>Today</button>
+          <button type="button" onClick={() => setSelectedDate((date) => shiftDateKey(date, 1))}>Next day →</button>
+        </div>
+      </section>
+
       <div className="sig-filters">
         {(["all", "high", "medium", "low"] as const).map((value) => (
           <button
@@ -210,7 +242,7 @@ function FundamentalsPage() {
       )}
       {!loading && error && <div className="inline-error" role="alert">{error}</div>}
       {!loading && status?.state === "connected" && filtered.length === 0 && (
-        <div className="home-empty">No economic events in this date window.</div>
+        <div className="home-empty">No economic events for {selectedDate === todayKey ? "today" : selectedDateLabel}.</div>
       )}
 
       {!loading && filtered.map((event) => {
