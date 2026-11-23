@@ -105,8 +105,16 @@ export interface TradingSignal {
   createdAt: string;
   entry?: number;
   stopLoss?: number;
+  /** Legacy single target retained for older clients; maps to TP1. */
   takeProfit?: number;
+  takeProfit1?: number;
+  takeProfit2?: number;
+  takeProfit3?: number;
+  /** Each ratio is calculated from entry to its matching target. */
   riskReward?: number;
+  riskReward1?: number;
+  riskReward2?: number;
+  riskReward3?: number;
   tags?: string[];
   marketOpen?: boolean;
   leanScore?: number;
