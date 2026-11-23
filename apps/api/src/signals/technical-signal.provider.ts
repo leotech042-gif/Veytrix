@@ -101,16 +101,22 @@ export class TechnicalSignalProvider implements SignalProvider {
       const deep = Boolean(instrumentFilter);
 
       for (const symbol of symbols) {
-        const cached = this.signalCache.get(symbol);
-        if (cached && now - cached.at < this.signalCacheMs) {
-          signals.push(cached.signal);
-          continue;
-        }
-
         const quote = quotes.find(
           (item) => item.instrument.toUpperCase() === symbol,
         );
         if (!quote || (quote.last === undefined && quote.bid === undefined)) {
+          continue;
+        }
+
+        const cached = this.signalCache.get(symbol);
+        const cacheStillValid =
+          cached &&
+          now - cached.at < this.signalCacheMs &&
+          cached.signal.marketOpen === marketOpen &&
+          !marketStatus.delayed &&
+          !quote.delayed;
+        if (cacheStillValid) {
+          signals.push(cached.signal);
           continue;
         }
 
@@ -127,6 +133,7 @@ export class TechnicalSignalProvider implements SignalProvider {
           quote,
           instrument,
           marketOpen,
+          marketOpen && !marketStatus.delayed && !quote.delayed,
           deep,
           events,
         );
@@ -156,6 +163,7 @@ export class TechnicalSignalProvider implements SignalProvider {
     quote: MarketQuote,
     instrument: MarketInstrument,
     marketOpen: boolean,
+    allowSetups: boolean,
     deep: boolean,
     events: readonly EconomicEvent[],
   ): Promise<TradingSignal | null> {
@@ -196,7 +204,7 @@ export class TechnicalSignalProvider implements SignalProvider {
     );
     const createdAt = new Date().toISOString();
 
-    if (analysis.setup) {
+    if (analysis.setup && allowSetups) {
       const setup = analysis.setup;
       return {
         id: instrument.symbol + "-setup-" + Date.now(),
@@ -250,7 +258,11 @@ export class TechnicalSignalProvider implements SignalProvider {
       title: arrow + " " + directionLabel + " · " + instrument.symbol,
       summary:
         directionLabel +
-        " structure bias · no confirmed M15 entry yet.",
+        (marketOpen
+          ? allowSetups
+            ? " structure bias · no confirmed M15 entry yet."
+            : " structure bias · quote data is delayed; no active setup."
+          : " structure bias · market closed; no active setup."),
       technicalExplanation: analysis.technicalExplanation,
       fundamentalExplanation,
       createdAt,
