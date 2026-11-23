@@ -539,7 +539,7 @@ function getNewYorkSession(time: string): string | null {
   if (!Number.isFinite(hour) || !Number.isFinite(minute)) return null;
   const total = hour * 60 + minute;
 
-  if (total >= 20 * 60 || total < 24 * 60) return "ASIA_KILLZONE";
+  if (total >= 20 * 60 && total < 24 * 60) return "ASIA_KILLZONE";
   if (total >= 2 * 60 && total < 5 * 60) return "LONDON_KILLZONE";
   if (total >= 7 * 60 && total < 10 * 60) return "NEW_YORK_KILLZONE";
   return null;
