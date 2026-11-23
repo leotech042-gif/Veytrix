@@ -89,7 +89,7 @@ export class NewsIntelligenceService {
         mode: "ArtList",
         format: "json",
         startdatetime: this.toGdeltDate(startMs),
-        enddatetime: this.toGdeltDate(endMs),
+        enddatetime: this.toGdeltDate(endMs - 1),
         maxrecords: "250",
         sort: "DateDesc",
       }).toString();
@@ -108,7 +108,7 @@ export class NewsIntelligenceService {
 
       const payload = (await response.json()) as { articles?: unknown };
       const rows = Array.isArray(payload.articles) ? (payload.articles as GdeltArticle[]) : [];
-      const articles = this.analyseArticles(rows, endMs);
+      const articles = this.analyseArticles(rows, startMs, endMs);
       const pairBiases = this.buildPairBiases(articles);
       const value: NewsIntelligence = {
         provider: "GDELT global news",
@@ -150,7 +150,7 @@ export class NewsIntelligenceService {
     return new Date(timestamp).toISOString().replace(/\D/g, "").slice(0, 14);
   }
 
-  private analyseArticles(rows: GdeltArticle[], referenceTimeMs: number): NewsArticleAnalysis[] {
+  private analyseArticles(rows: GdeltArticle[], startTimeMs: number, endTimeMs: number): NewsArticleAnalysis[] {
     const seen = new Set<string>();
     const analysed: NewsArticleAnalysis[] = [];
     for (const row of rows) {
@@ -163,6 +163,8 @@ export class NewsIntelligenceService {
 
       const publishedAt = this.parseDate(row.seendate);
       if (!publishedAt) continue;
+      const publishedMs = Date.parse(publishedAt);
+      if (publishedMs < startTimeMs || publishedMs >= endTimeMs) continue;
       const currencies = CURRENCY_PATTERNS
         .filter(([, pattern]) => pattern.test(title))
         .map(([currency]) => currency);
@@ -172,7 +174,7 @@ export class NewsIntelligenceService {
         ? row.domain
         : this.domainFromUrl(rawUrl);
       const cue = this.scoreHeadline(title);
-      const ageHours = Math.max(0, (referenceTimeMs - Date.parse(publishedAt)) / 3_600_000);
+      const ageHours = Math.max(0, (endTimeMs - publishedMs) / 3_600_000);
       const freshness = Math.exp((-Math.LN2 * ageHours) / 24);
       const impactWeight = this.impactWeight(title);
       const score = cue.direction * cue.strength * impactWeight * freshness;
