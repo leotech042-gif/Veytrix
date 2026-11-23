@@ -290,7 +290,7 @@ function findFreshZones(
   atr: number,
 ): EntryZone[] {
   const zones: EntryZone[] = [];
-  const firstIndex = Math.max(2, shiftIndex - 1);
+  const firstIndex = Math.max(2, shiftIndex);
   const tolerance = atr * 0.12;
 
   for (let index = firstIndex; index < candles.length; index += 1) {
@@ -375,28 +375,39 @@ function findFreshZones(
 function isRejectionCandle(
   candle: MarketCandle,
   direction: Direction,
+  previous?: MarketCandle,
 ): boolean {
   const range = candle.high - candle.low;
   const body = Math.abs(candle.close - candle.open);
   if (range <= 0 || body <= 0) return false;
   const lowerWick = Math.min(candle.open, candle.close) - candle.low;
   const upperWick = candle.high - Math.max(candle.open, candle.close);
-  const bullishEngulfing =
-    candle.close > candle.open &&
-    candle.close >= Math.max(candle.open, candle.open) &&
-    candle.open <= candle.close;
-  const bearishEngulfing =
-    candle.close < candle.open &&
-    candle.close <= Math.min(candle.open, candle.open) &&
-    candle.open >= candle.close;
+  const bullishEngulfing = Boolean(
+    previous &&
+      previous.close < previous.open &&
+      candle.close > candle.open &&
+      candle.open <= previous.close &&
+      candle.close >= previous.open,
+  );
+  const bearishEngulfing = Boolean(
+    previous &&
+      previous.close > previous.open &&
+      candle.close < candle.open &&
+      candle.open >= previous.close &&
+      candle.close <= previous.open,
+  );
   if (direction === "bullish") {
     return (
-      (candle.close > candle.open && lowerWick >= body * 1.5 && candle.close > candle.low + range * 0.65) ||
+      (candle.close > candle.open &&
+        lowerWick >= body * 1.5 &&
+        candle.close > candle.low + range * 0.65) ||
       bullishEngulfing
     );
   }
   return (
-    (candle.close < candle.open && upperWick >= body * 1.5 && candle.close < candle.high - range * 0.65) ||
+    (candle.close < candle.open &&
+      upperWick >= body * 1.5 &&
+      candle.close < candle.high - range * 0.65) ||
     bearishEngulfing
   );
 }
@@ -429,7 +440,7 @@ function findBreakRetest(
     const retested = direction === "bullish"
       ? last.low <= level + tolerance && last.close > level
       : last.high >= level - tolerance && last.close < level;
-    if (retested && isRejectionCandle(last, direction)) {
+    if (retested && isRejectionCandle(last, direction, candles[candles.length - 2])) {
       return { level, index };
     }
   }
@@ -597,7 +608,7 @@ export function analysePriceAction(
         }
       : null);
 
-  if (!zone || !isRejectionCandle(m15[m15.length - 1], direction)) {
+  if (!zone || !isRejectionCandle(m15[m15.length - 1], direction, m15[m15.length - 2])) {
     return {
       direction,
       confidence: bias.confidence,
