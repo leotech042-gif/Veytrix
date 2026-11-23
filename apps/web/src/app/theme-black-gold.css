@@ -233,8 +233,8 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 10px;
   gap: 8px;
+  margin-bottom: 10px;
 }
 .vx-sig-kind {
   display: inline-flex;
@@ -345,6 +345,27 @@ body {
   display: grid;
   place-items: center;
   line-height: 1;
+}
+.notif-live-dot {
+  position: absolute;
+  bottom: 4px;
+  left: 4px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #6e675c;
+}
+.notif-live-dot.on {
+  background: #3dba8a;
+  box-shadow: 0 0 8px rgba(61, 186, 138, 0.55);
+}
+.notif-live-label {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--muted);
+}
+.notif-live-label.on {
+  color: #3dba8a;
 }
 .notif-backdrop {
   position: fixed;
