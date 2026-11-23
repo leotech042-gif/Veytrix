@@ -15,6 +15,7 @@ import type {
   MarketQuote,
 } from "@veytrix/shared";
 import {
+  getMarketHistory,
   getMarketInstruments,
   getMarketQuotes,
   getMarketStatus,
@@ -269,6 +270,82 @@ function formatTime(value: string): string {
   }).format(date);
 }
 
+type WatchTab = "watchlist" | "all" | "metals" | "forex";
+
+const CURRENCY_FLAGS: Record<string, string> = {
+  EUR: "🇪🇺",
+  USD: "🇺🇸",
+  GBP: "🇬🇧",
+  JPY: "🇯🇵",
+  AUD: "🇦🇺",
+  CAD: "🇨🇦",
+  CHF: "🇨🇭",
+  NZD: "🇳🇿",
+  CNY: "🇨🇳",
+};
+
+function WatchAssetMark({
+  part,
+  symbol,
+}: {
+  part: string;
+  symbol: string;
+}) {
+  const flag = CURRENCY_FLAGS[part];
+  let label = flag ?? part.slice(0, 3);
+  let tone = "watch-asset--generic";
+  if (part === "XAU") {
+    label = "Au";
+    tone = "watch-asset--gold";
+  } else if (part === "XAG") {
+    label = "Ag";
+    tone = "watch-asset--silver";
+  } else if (part === "BTC") {
+    label = "₿";
+    tone = "watch-asset--bitcoin";
+  } else if (part === "ETH") {
+    label = "◆";
+    tone = "watch-asset--ethereum";
+  } else if (flag) {
+    tone = "watch-asset--flag";
+  } else if (symbol.startsWith("US") && /[0-9]/.test(symbol)) {
+    label = "🇺🇸";
+    tone = "watch-asset--flag";
+  }
+
+  return (
+    <span className={"watch-asset " + tone} aria-label={part}>
+      {label}
+    </span>
+  );
+}
+
+function WatchPairMark({ instrument }: { instrument: MarketInstrument }) {
+  const symbol = instrument.symbol.toUpperCase();
+  const base = symbol.slice(0, 3);
+  const quote = symbol.length >= 6 ? symbol.slice(3, 6) : "";
+  return (
+    <span className="watch-pair-mark" aria-hidden="true">
+      <WatchAssetMark part={base} symbol={symbol} />
+      {quote ? <WatchAssetMark part={quote} symbol={symbol} /> : null}
+    </span>
+  );
+}
+
+function sparklinePath(values: number[]): string {
+  if (values.length < 2) return "";
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const range = max - min || Math.max(Math.abs(max) * 0.00001, 1);
+  return values
+    .map((value, index) => {
+      const x = (index / (values.length - 1)) * 100;
+      const y = 27 - ((value - min) / range) * 22;
+      return (index === 0 ? "M" : "L") + x.toFixed(1) + " " + y.toFixed(1);
+    })
+    .join(" ");
+}
+
 export function MarketWatch({
   feed,
   favoritesOnly = false,
@@ -280,395 +357,261 @@ export function MarketWatch({
 }) {
   const { favorites, toggle } = useMarketFavorites();
   const [search, setSearch] = useState("");
-  const [category, setCategory] = useState<MarketCategory | "all">("all");
-
-  const filtered = useMemo(() => {
-    const query = search.trim().toLocaleLowerCase();
-    const isSearching = query.length > 0;
-
-    return feed.instruments.filter((instrument) => {
-      const matchesQuery =
-        !query ||
-        instrument.symbol.toLocaleLowerCase().includes(query) ||
-        instrument.displayName.toLocaleLowerCase().includes(query);
-
-      const matchesCategory =
-        category === "all" || instrument.category === category;
-
-      const matchesFavorite =
-        isSearching || favorites.includes(instrument.symbol);
-
-      return matchesQuery && matchesCategory && matchesFavorite;
-    });
-  }, [category, favorites, feed.instruments, search]);
+  const [tab, setTab] = useState<WatchTab>(favoritesOnly ? "watchlist" : "watchlist");
+  const [selectedSymbol, setSelectedSymbol] = useState("");
+  const [dailyHistory, setDailyHistory] = useState<Record<string, number[]>>({});
 
   const quoteBySymbol = useMemo(
     () =>
       new Map(
         feed.quotes.map((quote) => [
-          quote.instrument.toLocaleUpperCase(),
+          quote.instrument.toUpperCase(),
           quote,
         ]),
       ),
     [feed.quotes],
   );
 
+  const counts = useMemo(() => {
+    const symbols = new Set(feed.instruments.map((item) => item.symbol.toUpperCase()));
+    return {
+      watchlist: favorites.filter((item) => symbols.has(item.toUpperCase())).length,
+      all: feed.instruments.length,
+      metals: feed.instruments.filter((item) => item.category === "metals").length,
+      forex: feed.instruments.filter((item) => item.category === "forex").length,
+    };
+  }, [favorites, feed.instruments]);
+
+  const filtered = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    return feed.instruments.filter((instrument) => {
+      const isFavorite = favorites.includes(instrument.symbol);
+      const matchesTab =
+        tab === "all" ||
+        (tab === "metals" && instrument.category === "metals") ||
+        (tab === "forex" && instrument.category === "forex") ||
+        (tab === "watchlist" && isFavorite);
+      const matchesSearch =
+        !query ||
+        instrument.symbol.toLowerCase().includes(query) ||
+        instrument.displayName.toLowerCase().includes(query);
+      return matchesTab && matchesSearch;
+    });
+  }, [favorites, feed.instruments, search, tab]);
+
+  useEffect(() => {
+    if (feed.status?.state !== "connected" || filtered.length === 0) return;
+    let active = true;
+    const missing = filtered
+      .slice(0, 16)
+      .filter((instrument) => !dailyHistory[instrument.symbol.toUpperCase()]);
+    if (missing.length === 0) return;
+
+    void Promise.all(
+      missing.map(async (instrument) => {
+        try {
+          const candles = await getMarketHistory(instrument.symbol, "D1");
+          const values = candles
+            .filter((candle) => Number.isFinite(candle.close) && candle.close > 0)
+            .slice(-24)
+            .map((candle) => candle.close);
+          return [instrument.symbol.toUpperCase(), values] as const;
+        } catch {
+          return [instrument.symbol.toUpperCase(), []] as const;
+        }
+      }),
+    ).then((entries) => {
+      if (!active) return;
+      setDailyHistory((current) => {
+        const next = { ...current };
+        for (const [symbol, values] of entries) next[symbol] = values;
+        return next;
+      });
+    });
+
+    return () => {
+      active = false;
+    };
+  }, [dailyHistory, feed.status?.state, filtered]);
+
+  const currentRows = filtered.slice(0, 40);
+  const watchTitle = tab === "watchlist" ? "WATCHLIST" : tab === "all" ? "ALL MARKETS" : tab.toUpperCase();
+
+  function changePercent(instrument: MarketInstrument): number | null {
+    const quote = quoteBySymbol.get(instrument.symbol.toUpperCase());
+    if (typeof quote?.changePercent === "number" && Number.isFinite(quote.changePercent)) {
+      return quote.changePercent;
+    }
+    const values = dailyHistory[instrument.symbol.toUpperCase()];
+    if (!values || values.length < 2) return null;
+    const currentPrice = quote?.last ?? quote?.bid ?? quote?.ask ?? values[values.length - 1];
+    const closes = values;
+    const today = new Date().toISOString().slice(0, 10);
+    const lastCandle = closes[closes.length - 1];
+    const previousClose = lastCandle > 0 ? closes[closes.length - 2] : lastCandle;
+    const sameDayCandle = currentRows.some(
+      (row) => row.symbol === instrument.symbol && row.category === instrument.category,
+    ) && today.length === 10;
+    const base = sameDayCandle ? previousClose : lastCandle;
+    if (!Number.isFinite(currentPrice) || !Number.isFinite(base) || base <= 0) return null;
+    return ((currentPrice - base) / base) * 100;
+  }
+
+  function formattedChange(value: number | null): string {
+    if (value === null || !Number.isFinite(value)) return "—";
+    return (value > 0 ? "+" : "") + value.toFixed(2) + "%";
+  }
+
   return (
-    <section className={`panel${compact ? " compact-panel" : ""}`}>
-      <div className="panel-heading">
-        <div>
-          <h2>
-            {favoritesOnly ? "Favourite markets" : "Quotes & market watch"}
-          </h2>
-          <p className="panel-description">
-            Broker-independent quotes and instruments from the configured
-            market-data provider.
-          </p>
+    <section className={"watchlist-screen" + (compact ? " compact-panel" : "")}>
+      <div className="watchlist-top">
+        <label className="watchlist-search">
+          <span aria-hidden="true">⌕</span>
+          <span className="visually-hidden">Search symbol or name</span>
+          <input
+            type="search"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="Search symbol or name"
+          />
+          {search ? (
+            <button type="button" aria-label="Clear search" onClick={() => setSearch("")}>
+              ×
+            </button>
+          ) : null}
+        </label>
+
+        <div className="watchlist-tabs" role="tablist" aria-label="Market categories">
+          {([
+            ["watchlist", "☆  Watchlist", counts.watchlist],
+            ["all", "All", counts.all],
+            ["metals", "Metals", counts.metals],
+            ["forex", "Forex", counts.forex],
+          ] as [WatchTab, string, number][]).map(([value, label, count]) => (
+            <button
+              key={value}
+              type="button"
+              role="tab"
+              aria-selected={tab === value}
+              className={"watchlist-tab" + (tab === value ? " active" : "")}
+              onClick={() => setTab(value)}
+            >
+              {label} <span>{count}</span>
+            </button>
+          ))}
         </div>
-        <button
-          className="text-button"
-          type="button"
-          onClick={feed.refresh}
-          disabled={feed.refreshing}
-        >
-          {feed.refreshing ? "Checking…" : "Refresh"}
-        </button>
       </div>
 
-      {feed.status?.state === "connected" && (
-        <p className="market-feed-status" role="status">
-          Market data from <strong>{feed.status.provider}</strong>
-          {feed.status.updatedAt
-            ? ` · connection checked ${formatTime(feed.status.updatedAt)}`
-            : ""}
-          {feed.status.delayed ? " · delayed" : ""}
-        </p>
-      )}
+      <div className="watchlist-columns">
+        <span>{watchTitle}</span>
+        <span>LAST · CHG%</span>
+      </div>
 
-      {feed.status?.state === "connected" && (
-        <div className="market-filters">
-          <label className="search-field">
-            <span aria-hidden="true">⌕</span>
-            <span className="visually-hidden">Search instruments</span>
-            <input
-              type="search"
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              placeholder="Search any pair to add to favourites…"
-            />
-          </label>
+      {feed.error ? <div className="inline-error" role="alert">{feed.error}</div> : null}
+      {feed.instrumentError ? (
+        <div className="inline-error" role="alert">Instrument list unavailable: {feed.instrumentError}</div>
+      ) : null}
+      {feed.quoteError ? (
+        <div className="inline-error" role="alert">Latest quotes unavailable: {feed.quoteError}</div>
+      ) : null}
 
-          {!favoritesOnly && (
-            <label className="select-field">
-              <span className="visually-hidden">Filter by market category</span>
-              <select
-                value={category}
-                onChange={(event) =>
-                  setCategory(event.target.value as MarketCategory | "all")
-                }
-              >
-                {categories.map((item) => (
-                  <option key={item.value} value={item.value}>
-                    {item.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-          )}
-
+      {feed.status?.state === "unconfigured" ? (
+        <div className="watchlist-empty" role="status">
+          <strong>No market data provider connected</strong>
+          <span>Connect a licensed provider to display real instruments and prices.</span>
+          <Link href="/settings">Provider settings</Link>
         </div>
-      )}
+      ) : null}
+      {feed.status?.state === "disconnected" ? (
+        <div className="watchlist-empty" role="status">{feed.status.message}</div>
+      ) : null}
+      {feed.loading ? <div className="watchlist-empty" role="status">Loading market data…</div> : null}
 
-      {feed.error && (
-        <div className="inline-error" role="alert">
-          {feed.error}
+      {!feed.loading && feed.status?.state === "connected" && currentRows.length === 0 ? (
+        <div className="watchlist-empty" role="status">
+          {search
+            ? "No instruments match this search."
+            : tab === "watchlist"
+              ? "Your watchlist is empty. Add instruments with the star."
+              : "No instruments are available in this category."}
         </div>
-      )}
+      ) : null}
 
-      {feed.status?.state === "unconfigured" && (
-        <div className="empty-state" role="status">
-          <span className="empty-state-icon" aria-hidden="true">
-            ◈
-          </span>
-          <h3>No market provider connected</h3>
-          <p>
-            Instruments are discovered from your provider. Configure a licensed
-            market-data feed in the API to populate this list.
-          </p>
-          <Link className="secondary-button" href="/settings">
-            View connection settings
-          </Link>
-        </div>
-      )}
+      {currentRows.map((instrument) => {
+        const symbol = instrument.symbol.toUpperCase();
+        const quote = quoteBySymbol.get(symbol);
+        const last = quote?.last ?? quote?.bid ?? quote?.ask;
+        const values = dailyHistory[symbol] ?? [];
+        const change = changePercent(instrument);
+        const rising = values.length >= 2
+          ? values[values.length - 1] >= values[0]
+          : change !== null && change >= 0;
+        const path = sparklinePath(values);
+        const isFavorite = favorites.includes(instrument.symbol);
+        const price = last === undefined
+          ? "—"
+          : formatPrice(last, instrument);
 
-      {feed.status?.state === "disconnected" && (
-        <div className="inline-error" role="status">
-          {feed.status.message}
-        </div>
-      )}
+        return (
+          <div
+            key={instrument.symbol}
+            className={"watchlist-row" + (selectedSymbol === symbol ? " selected" : "")}
+          >
+            <Link
+              href={"/charts?symbol=" + encodeURIComponent(instrument.symbol)}
+              className="watchlist-instrument"
+              onClick={() => setSelectedSymbol(symbol)}
+              aria-label={"Open " + instrument.symbol + " chart"}
+            >
+              <WatchPairMark instrument={instrument} />
+              <span className="watchlist-instrument-copy">
+                <strong>{instrument.symbol}</strong>
+                <span>{instrument.displayName}</span>
+              </span>
+            </Link>
 
-      {feed.instrumentError && (
-        <div className="inline-error" role="alert">
-          Instrument list unavailable: {feed.instrumentError}
-        </div>
-      )}
+            <span className="watchlist-spark" aria-hidden="true">
+              {path ? (
+                <svg viewBox="0 0 100 32" preserveAspectRatio="none">
+                  <path d={path} className={rising ? "up" : "down"} />
+                </svg>
+              ) : (
+                <span className="watchlist-spark-empty">—</span>
+              )}
+            </span>
 
-      {feed.quoteError && (
-        <div className="inline-error" role="alert">
-          Latest quotes unavailable: {feed.quoteError}
-        </div>
-      )}
+            <span className="watchlist-price">
+              <strong>{price}</strong>
+              <span className={"watchlist-change" + (change === null ? "" : change >= 0 ? " positive" : " negative")}>
+                {formattedChange(change)}
+              </span>
+            </span>
 
-      {feed.loading && (
-        <div className="empty-state compact-empty" role="status">
-          Checking provider instruments…
-        </div>
-      )}
-
-      {!feed.loading &&
-        feed.status?.state === "connected" &&
-        !feed.instrumentError &&
-        filtered.length === 0 && (
-          <div className="empty-state compact-empty" role="status">
-            {feed.instruments.length === 0
-              ? "The connected provider has not returned any supported instruments."
-              : favorites.length === 0 && !search
-                ? "No favourites yet. Type a pair name above and click the star to add it."
-                : "No favourite instruments match this search."}
+            <button
+              type="button"
+              className={"watchlist-favorite" + (isFavorite ? " active" : "")}
+              aria-label={(isFavorite ? "Remove " : "Add ") + instrument.symbol + " " + (isFavorite ? "from" : "to") + " watchlist"}
+              aria-pressed={isFavorite}
+              onClick={() => toggle(instrument.symbol)}
+            >
+              {isFavorite ? "★" : "☆"}
+            </button>
           </div>
-        )}
+        );
+      })}
 
-      {filtered.length > 0 && (
-        <div className="market-table-wrap">
-          <table className="market-table">
-            <thead>
-              <tr>
-                <th scope="col">Instrument</th>
-                <th scope="col">Bid</th>
-                <th scope="col">Ask</th>
-                <th scope="col">Last</th>
-                <th scope="col">Spread</th>
-                <th scope="col">Change</th>
-                <th scope="col">Updated</th>
-                <th scope="col">
-                  <span className="visually-hidden">Favourite</span>
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((instrument) => {
-                const quote = quoteBySymbol.get(
-                  instrument.symbol.toLocaleUpperCase(),
-                );
-                const spread =
-                  quote?.spread ??
-                  (quote?.bid !== undefined && quote.ask !== undefined
-                    ? quote.ask - quote.bid
-                    : undefined);
-                const change =
-                  quote?.change === undefined
-                    ? null
-                    : formatPrice(quote.change, instrument);
-                const changePercent =
-                  quote?.changePercent === undefined
-                    ? null
-                    : `${quote.changePercent > 0 ? "+" : ""}${quote.changePercent.toFixed(2)}%`;
-
-                return (
-                  <tr key={instrument.symbol}>
-                    <th scope="row">
-                      <Link
-                        href={`/charts?symbol=${instrument.symbol}`}
-                        className="instrument-link"
-                        style={{
-                          textDecoration: "none",
-                          color: "inherit",
-                          display: "block",
-                        }}
-                      >
-                        <span className="instrument-pair">
-                          {instrument.symbol}
-                        </span>
-                        <span className="instrument-name">
-                          {instrument.displayName}
-                        </span>
-                      </Link>
-                    </th>
-                    <td>
-                      {quote?.bid === undefined
-                        ? "—"
-                        : formatPrice(quote.bid, instrument)}
-                    </td>
-                    <td>
-                      {quote?.ask === undefined
-                        ? "—"
-                        : formatPrice(quote.ask, instrument)}
-                    </td>
-                    <td>
-                      {quote?.last === undefined
-                        ? "—"
-                        : formatPrice(quote.last, instrument)}
-                    </td>
-                    <td>
-                      {spread === undefined
-                        ? "—"
-                        : formatPrice(spread, instrument)}
-                    </td>
-                    <td>
-                      {change || changePercent
-                        ? [change, changePercent].filter(Boolean).join(" · ")
-                        : "—"}
-                    </td>
-                    <td>
-                      {quote ? (
-                        <time dateTime={quote.asOf}>
-                          {formatTime(quote.asOf)}
-                        </time>
-                      ) : (
-                        <span className="instrument-state">
-                          Quote unavailable
-                        </span>
-                      )}
-                      {quote?.delayed && (
-                        <span className="instrument-state">Delayed</span>
-                      )}
-                    </td>
-                    <td>
-                      <button
-                        className={`favorite-button${
-                          favorites.includes(instrument.symbol)
-                            ? " selected"
-                            : ""
-                        }`}
-                        type="button"
-                        aria-label={`${
-                          favorites.includes(instrument.symbol)
-                            ? "Remove"
-                            : "Add"
-                        } ${instrument.symbol} ${
-                          favorites.includes(instrument.symbol) ? "from" : "to"
-                        } favourites`}
-                        aria-pressed={favorites.includes(instrument.symbol)}
-                        onClick={() => toggle(instrument.symbol)}
-                      >
-                        {favorites.includes(instrument.symbol) ? "★" : "☆"}
-                      </button>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      {filtered.length > 0 && (
-        <div className="market-cards">
-          {filtered.map((instrument) => {
-            const quote = quoteBySymbol.get(
-              instrument.symbol.toLocaleUpperCase(),
-            );
-            const spread =
-              quote?.spread ??
-              (quote?.bid !== undefined && quote.ask !== undefined
-                ? quote.ask - quote.bid
-                : undefined);
-            const isFavorite = favorites.includes(instrument.symbol);
-
-            return (
-              <article className="quote-card" key={instrument.symbol}>
-                <div className="quote-card-heading">
-                  <div>
-                    <Link
-                      href={`/charts?symbol=${instrument.symbol}`}
-                      style={{ textDecoration: "none", color: "inherit" }}
-                    >
-                      <strong>{instrument.symbol}</strong>
-                      <span>{instrument.displayName}</span>
-                    </Link>
-                  </div>
-                  <button
-                    className={`favorite-button${isFavorite ? " selected" : ""}`}
-                    type="button"
-                    aria-label={`${
-                      isFavorite ? "Remove" : "Add"
-                    } ${instrument.symbol} ${
-                      isFavorite ? "from" : "to"
-                    } favourites`}
-                    aria-pressed={isFavorite}
-                    onClick={() => toggle(instrument.symbol)}
-                  >
-                    {isFavorite ? "★" : "☆"}
-                  </button>
-                </div>
-                <div className="quote-card-prices">
-                  <div>
-                    <span>Bid</span>
-                    <strong>
-                      {quote?.bid === undefined
-                        ? "—"
-                        : formatPrice(quote.bid, instrument)}
-                    </strong>
-                  </div>
-                  <div>
-                    <span>Ask</span>
-                    <strong>
-                      {quote?.ask === undefined
-                        ? "—"
-                        : formatPrice(quote.ask, instrument)}
-                    </strong>
-                  </div>
-                  <div>
-                    <span>Last</span>
-                    <strong>
-                      {quote?.last === undefined
-                        ? "—"
-                        : formatPrice(quote.last, instrument)}
-                    </strong>
-                  </div>
-                </div>
-                <div className="quote-card-meta">
-                  <span>
-                    Spread{" "}
-                    {spread === undefined
-                      ? "—"
-                      : formatPrice(spread, instrument)}
-                  </span>
-                  <span>
-                    Change{" "}
-                    {quote?.change === undefined
-                      ? "—"
-                      : formatPrice(quote.change, instrument)}
-                    {quote?.changePercent === undefined
-                      ? ""
-                      : ` · ${quote.changePercent > 0 ? "+" : ""}${quote.changePercent.toFixed(2)}%`}
-                  </span>
-                </div>
-                <div className="quote-card-time">
-                  {quote ? (
-                    <>
-                      <time dateTime={quote.asOf}>
-                        {formatTime(quote.asOf)}
-                      </time>
-                      {quote.delayed && <span>Delayed</span>}
-                    </>
-                  ) : (
-                    <span>Quote unavailable</span>
-                  )}
-                </div>
-              </article>
-            );
-          })}
-        </div>
-      )}
-
-      {feed.status?.state === "connected" && feed.quotes.length > 0 && (
-        <p className="market-data-note">
-          Quote timestamps are supplied by the provider. Refreshing
-          automatically every 30 seconds; provider delays are shown when
-          reported.
+      {feed.status?.state === "connected" && feed.quotes.length > 0 ? (
+        <p className="watchlist-data-note">
+          Prices and candles are supplied by {feed.status.provider}.
+          {feed.status.delayed ? " Quotes are delayed." : ""}
         </p>
-      )}
+      ) : null}
+      <div className="watchlist-footer">
+        <button type="button" onClick={feed.refresh} disabled={feed.refreshing}>
+          {feed.refreshing ? "Refreshing…" : "Refresh"}
+        </button>
+        <span>{feed.quotes.length} quotes · provider data only</span>
+      </div>
     </section>
   );
 }
