@@ -103,6 +103,10 @@ export interface TradingSignal {
   timeframe: ChartTimeframe;
   title: string;
   summary: string;
+  /** Technical structure and price-action context shown when bias is expanded. */
+  technicalExplanation?: string;
+  /** Recent released macro context for the instrument; not a price forecast. */
+  fundamentalExplanation?: string;
   createdAt: string;
   entry?: number;
   stopLoss?: number;
