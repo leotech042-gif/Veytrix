@@ -17,8 +17,8 @@ export class FundamentalsController {
   }
 
   @Get("news")
-  getNews() {
-    return this.news.getIntelligence();
+  getNews(@Query("from") from?: string, @Query("to") to?: string) {
+    return this.news.getIntelligence(from, to);
   }
 
   @Get("calendar")
