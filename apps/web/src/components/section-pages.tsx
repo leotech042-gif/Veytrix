@@ -177,6 +177,19 @@ function FundamentalsPage() {
         </div>
       )}
 
+      <section className="fx-calendar-day-nav" aria-label="Economic calendar date">
+        <div className="fx-calendar-day-copy">
+          <span className="mw-eyebrow">SELECTED DAY</span>
+          <strong>{selectedDate === todayKey ? "Today" : selectedDateLabel}</strong>
+          <span>{selectedDateLabel}</span>
+        </div>
+        <div className="fx-calendar-day-actions">
+          <button type="button" onClick={() => setSelectedDate((date) => shiftDateKey(date, -1))}>← Previous day</button>
+          <button type="button" className={selectedDate === todayKey ? "active" : ""} onClick={() => setSelectedDate(todayKey)}>Today</button>
+          <button type="button" onClick={() => setSelectedDate((date) => shiftDateKey(date, 1))}>Next day →</button>
+        </div>
+      </section>
+
       <section className="fx-news-intelligence">
         <div className="fx-news-heading">
           <div>
@@ -255,18 +268,7 @@ function FundamentalsPage() {
         )}
       </section>
 
-      <section className="fx-calendar-day-nav" aria-label="Economic calendar date">
-        <div className="fx-calendar-day-copy">
-          <span className="mw-eyebrow">ECONOMIC CALENDAR</span>
-          <strong>{selectedDate === todayKey ? "Today" : selectedDateLabel}</strong>
-          <span>{selectedDateLabel}</span>
-        </div>
-        <div className="fx-calendar-day-actions">
-          <button type="button" onClick={() => setSelectedDate((date) => shiftDateKey(date, -1))}>← Previous day</button>
-          <button type="button" className={selectedDate === todayKey ? "active" : ""} onClick={() => setSelectedDate(todayKey)}>Today</button>
-          <button type="button" onClick={() => setSelectedDate((date) => shiftDateKey(date, 1))}>Next day →</button>
-        </div>
-      </section>
+
 
       <div className="sig-filters">
         {(["all", "high", "medium", "low"] as const).map((value) => (
