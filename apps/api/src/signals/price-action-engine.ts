@@ -566,7 +566,7 @@ function hasFlipType2(
   const breakoutTime = Date.parse(flip.breakoutTime);
   return d1.some(
     (candle) =>
-      Date.parse(candle.time) > breakoutTime &&
+      Date.parse(candle.time) + TIMEFRAME_MS.D1 > breakoutTime &&
       hasWickOverlap(candle, flip.bandBottom, flip.bandTop),
   );
 }
