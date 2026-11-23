@@ -1,4 +1,4 @@
-import { Injectable, Logger } from "@nestjs/common";
+import { BadRequestException, Injectable, Logger } from "@nestjs/common";
 import type {
   NewsArticleAnalysis,
   NewsCurrencyImpact,
@@ -59,12 +59,27 @@ const FX_PAIRS = [
 @Injectable()
 export class NewsIntelligenceService {
   private readonly logger = new Logger(NewsIntelligenceService.name);
-  private cache: { at: number; value: NewsIntelligence } | null = null;
+  private readonly cache = new Map<string, { at: number; value: NewsIntelligence }>();
   private readonly cacheMs = 5 * 60_000;
 
-  async getIntelligence(): Promise<NewsIntelligence> {
-    if (this.cache && Date.now() - this.cache.at < this.cacheMs) {
-      return this.cache.value;
+  async getIntelligence(from?: string, to?: string): Promise<NewsIntelligence> {
+    const now = Date.now();
+    const startMs = from ? Date.parse(from) : now - 24 * 60 * 60_000;
+    const endMs = to ? Date.parse(to) : now;
+
+    if (
+      !Number.isFinite(startMs) ||
+      !Number.isFinite(endMs) ||
+      endMs <= startMs ||
+      endMs - startMs > 26 * 60 * 60_000
+    ) {
+      throw new BadRequestException("News date range must be a valid single local day.");
+    }
+
+    const cacheKey = startMs + ":" + endMs;
+    const cached = this.cache.get(cacheKey);
+    if (cached && now - cached.at < this.cacheMs) {
+      return cached.value;
     }
 
     try {
@@ -73,8 +88,9 @@ export class NewsIntelligenceService {
         query: NEWS_QUERY,
         mode: "ArtList",
         format: "json",
-        timespan: "3d",
-        maxrecords: "100",
+        startdatetime: this.toGdeltDate(startMs),
+        enddatetime: this.toGdeltDate(endMs),
+        maxrecords: "250",
         sort: "DateDesc",
       }).toString();
 
@@ -92,7 +108,7 @@ export class NewsIntelligenceService {
 
       const payload = (await response.json()) as { articles?: unknown };
       const rows = Array.isArray(payload.articles) ? (payload.articles as GdeltArticle[]) : [];
-      const articles = this.analyseArticles(rows);
+      const articles = this.analyseArticles(rows, endMs);
       const pairBiases = this.buildPairBiases(articles);
       const value: NewsIntelligence = {
         provider: "GDELT global news",
@@ -100,18 +116,23 @@ export class NewsIntelligenceService {
         updatedAt: new Date().toISOString(),
         articles,
         pairBiases,
-        note: "Headline-based macro analysis. Scores measure the direction and strength of available headline evidence; they are not probabilities or guaranteed forecasts.",
+        note: "Analysis is restricted to headlines published during the selected date. Scores describe that day's headline evidence; they are not probabilities or guaranteed forecasts.",
       };
-      this.cache = { at: Date.now(), value };
+      this.cache.set(cacheKey, { at: now, value });
+      if (this.cache.size > 20) {
+        const oldestKey = this.cache.keys().next().value;
+        if (oldestKey) this.cache.delete(oldestKey);
+      }
       return value;
     } catch (error) {
       const message = error instanceof Error ? error.message : "News feed unavailable.";
       this.logger.warn("News intelligence refresh failed: " + message);
-      if (this.cache) {
+      const sameDayCache = this.cache.get(cacheKey);
+      if (sameDayCache) {
         return {
-          ...this.cache.value,
+          ...sameDayCache.value,
           state: "degraded",
-          note: "Showing cached news because the live feed is temporarily unavailable. " + this.cache.value.note,
+          note: "Showing cached headlines for this selected date because the live feed is temporarily unavailable. " + sameDayCache.value.note,
         };
       }
       return {
@@ -120,12 +141,16 @@ export class NewsIntelligenceService {
         updatedAt: new Date().toISOString(),
         articles: [],
         pairBiases: [],
-        note: message + " News bias is withheld until fresh headlines are available.",
+        note: message + " No directional bias is available for this date until the feed responds.",
       };
     }
   }
 
-  private analyseArticles(rows: GdeltArticle[]): NewsArticleAnalysis[] {
+  private toGdeltDate(timestamp: number): string {
+    return new Date(timestamp).toISOString().replace(/\\D/g, "").slice(0, 14);
+  }
+
+  private analyseArticles(rows: GdeltArticle[], referenceTimeMs: number): NewsArticleAnalysis[] {
     const seen = new Set<string>();
     const analysed: NewsArticleAnalysis[] = [];
     for (const row of rows) {
@@ -147,7 +172,7 @@ export class NewsIntelligenceService {
         ? row.domain
         : this.domainFromUrl(rawUrl);
       const cue = this.scoreHeadline(title);
-      const ageHours = Math.max(0, (Date.now() - Date.parse(publishedAt)) / 3_600_000);
+      const ageHours = Math.max(0, (referenceTimeMs - Date.parse(publishedAt)) / 3_600_000);
       const freshness = Math.exp((-Math.LN2 * ageHours) / 24);
       const impactWeight = this.impactWeight(title);
       const score = cue.direction * cue.strength * impactWeight * freshness;
