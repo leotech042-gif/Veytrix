@@ -454,7 +454,7 @@ export function MarketWatch({
   }
 
   return (
-    <section className={"watchlist-screen" + (compact ? " compact-panel" : "")}>
+    <section className={"watchlist-screen" + (compact ? " watchlist-compact" : "")}>
       <div className="watchlist-top">
         <label className="watchlist-search">
           <span aria-hidden="true">⌕</span>
