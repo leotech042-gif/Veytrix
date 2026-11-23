@@ -7,6 +7,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -35,6 +36,7 @@ type NotificationsContextValue = {
   clearAll: () => void;
   open: boolean;
   setOpen: (v: boolean) => void;
+  live: boolean;
 };
 
 const NotificationsContext = createContext<NotificationsContextValue | null>(
@@ -43,6 +45,18 @@ const NotificationsContext = createContext<NotificationsContextValue | null>(
 
 const STORAGE_KEY = "veytrix.notifications.v1";
 const SEEN_KEY = "veytrix.notifications.seen.v1";
+
+function apiBase(): string {
+  return process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000/api";
+}
+
+function wsAlertsUrl(): string {
+  const base = apiBase().replace(/\/api\/?$/, "");
+  if (base.startsWith("https://")) {
+    return base.replace(/^https/, "wss") + "/ws/alerts";
+  }
+  return base.replace(/^http/, "ws") + "/ws/alerts";
+}
 
 function loadStored(): AppNotification[] {
   if (typeof window === "undefined") return [];
@@ -70,10 +84,7 @@ function loadSeen(): Set<string> {
 
 function saveSeen(seen: Set<string>) {
   try {
-    localStorage.setItem(
-      SEEN_KEY,
-      JSON.stringify([...seen].slice(-200)),
-    );
+    localStorage.setItem(SEEN_KEY, JSON.stringify([...seen].slice(-200)));
   } catch {
     /* ignore */
   }
@@ -94,14 +105,27 @@ function kindLabel(kind: AlertKind): string {
   }
 }
 
+function isAlertKind(v: string): v is AlertKind {
+  return (
+    v === "setup" ||
+    v === "trigger" ||
+    v === "sl" ||
+    v === "tp" ||
+    v === "news"
+  );
+}
+
 export function NotificationsProvider({ children }: { children: ReactNode }) {
   const { favorites } = useMarketFavorites();
   const [items, setItems] = useState<AppNotification[]>([]);
   const [open, setOpen] = useState(false);
   const [hydrated, setHydrated] = useState(false);
+  const [live, setLive] = useState(false);
+  const seenRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     setItems(loadStored());
+    seenRef.current = loadSeen();
     setHydrated(true);
   }, []);
 
@@ -114,22 +138,119 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
     }
   }, [items, hydrated]);
 
-  const pushMany = useCallback((incoming: AppNotification[]) => {
-    if (incoming.length === 0) return;
+  const pushOne = useCallback((n: AppNotification) => {
+    if (seenRef.current.has(n.id)) return;
+    seenRef.current.add(n.id);
+    saveSeen(seenRef.current);
     setItems((prev) => {
-      const ids = new Set(prev.map((p) => p.id));
-      const next = [...incoming.filter((n) => !ids.has(n.id)), ...prev];
-      return next.slice(0, 80);
+      if (prev.some((p) => p.id === n.id)) return prev;
+      return [n, ...prev].slice(0, 80);
     });
   }, []);
 
+  // WebSocket live channel
   useEffect(() => {
     if (!hydrated) return;
+
+    let closed = false;
+    let ws: WebSocket | null = null;
+    let retryTimer: number | undefined;
+    let pingTimer: number | undefined;
+    let attempt = 0;
+
+    const connect = () => {
+      if (closed) return;
+      try {
+        ws = new WebSocket(wsAlertsUrl());
+      } catch {
+        setLive(false);
+        scheduleRetry();
+        return;
+      }
+
+      ws.onopen = () => {
+        attempt = 0;
+        setLive(true);
+        pingTimer = window.setInterval(() => {
+          if (ws?.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ type: "ping" }));
+          }
+        }, 25_000);
+      };
+
+      ws.onmessage = (ev) => {
+        try {
+          const msg = JSON.parse(String(ev.data)) as {
+            type?: string;
+            payload?: {
+              id?: string;
+              kind?: string;
+              title?: string;
+              body?: string;
+              href?: string;
+              createdAt?: number;
+            };
+          };
+          if (msg.type !== "alert" || !msg.payload?.id || !msg.payload.kind)
+            return;
+          if (!isAlertKind(msg.payload.kind)) return;
+          pushOne({
+            id: msg.payload.id,
+            kind: msg.payload.kind,
+            title: msg.payload.title ?? "Alert",
+            body: msg.payload.body ?? "",
+            href: msg.payload.href,
+            createdAt: msg.payload.createdAt ?? Date.now(),
+            read: false,
+          });
+        } catch {
+          /* ignore */
+        }
+      };
+
+      ws.onclose = () => {
+        setLive(false);
+        if (pingTimer !== undefined) window.clearInterval(pingTimer);
+        scheduleRetry();
+      };
+
+      ws.onerror = () => {
+        setLive(false);
+        try {
+          ws?.close();
+        } catch {
+          /* ignore */
+        }
+      };
+    };
+
+    const scheduleRetry = () => {
+      if (closed) return;
+      attempt += 1;
+      const delay = Math.min(30_000, 1500 * attempt);
+      retryTimer = window.setTimeout(connect, delay);
+    };
+
+    connect();
+
+    return () => {
+      closed = true;
+      if (retryTimer !== undefined) window.clearTimeout(retryTimer);
+      if (pingTimer !== undefined) window.clearInterval(pingTimer);
+      try {
+        ws?.close();
+      } catch {
+        /* ignore */
+      }
+    };
+  }, [hydrated, pushOne]);
+
+  // HTTP fallback poll when WS is down
+  useEffect(() => {
+    if (!hydrated || live) return;
     let cancelled = false;
 
     async function poll() {
-      const seen = loadSeen();
-      const fresh: AppNotification[] = [];
       const pairs =
         favorites.length > 0
           ? favorites.map((s) => s.toUpperCase())
@@ -140,82 +261,25 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
         if (!cancelled && Array.isArray(signals)) {
           for (const s of signals as TradingSignal[]) {
             if (s.type !== "setup") continue;
-
-            const setupId = `setup:${s.id}`;
-            if (!seen.has(setupId)) {
-              seen.add(setupId);
-              const dir =
-                s.direction === "bullish"
-                  ? "BUY"
-                  : s.direction === "bearish"
-                    ? "SELL"
-                    : "BIAS";
-              fresh.push({
-                id: setupId,
-                kind: "setup",
-                title: `Setup · ${s.instrument}`,
-                body: `${dir} ${s.timeframe}${s.entry != null ? ` · entry ${s.entry}` : ""}`,
-                href: "/signals",
-                createdAt: Date.now(),
-                read: false,
-              });
-            }
-
-            if (s.entry != null) {
-              const tid = `trigger:${s.id}`;
-              if (!seen.has(tid)) {
-                seen.add(tid);
-                fresh.push({
-                  id: tid,
-                  kind: "trigger",
-                  title: `Price trigger · ${s.instrument}`,
-                  body: `Watch entry near ${s.entry}`,
-                  href: `/charts?symbol=${encodeURIComponent(s.instrument)}`,
-                  createdAt: Date.now(),
-                  read: false,
-                });
-              }
-            }
-
-            const closed =
-              typeof s.summary === "string" &&
-              s.summary.toLowerCase().includes("market closed");
-
-            if (!closed && s.stopLoss != null && s.confidence >= 65) {
-              const sid = `sl-watch:${s.id}`;
-              if (!seen.has(sid)) {
-                seen.add(sid);
-                fresh.push({
-                  id: sid,
-                  kind: "sl",
-                  title: `SL level · ${s.instrument}`,
-                  body: `Stop set at ${s.stopLoss}`,
-                  href: "/signals",
-                  createdAt: Date.now(),
-                  read: false,
-                });
-              }
-            }
-
-            if (!closed && s.takeProfit != null && s.confidence >= 65) {
-              const pid = `tp-watch:${s.id}`;
-              if (!seen.has(pid)) {
-                seen.add(pid);
-                fresh.push({
-                  id: pid,
-                  kind: "tp",
-                  title: `TP level · ${s.instrument}`,
-                  body: `Target at ${s.takeProfit}`,
-                  href: "/signals",
-                  createdAt: Date.now(),
-                  read: false,
-                });
-              }
-            }
+            const dir =
+              s.direction === "bullish"
+                ? "BUY"
+                : s.direction === "bearish"
+                  ? "SELL"
+                  : "BIAS";
+            pushOne({
+              id: `setup:${s.id}`,
+              kind: "setup",
+              title: `Setup · ${s.instrument}`,
+              body: `${dir} ${s.timeframe}${s.entry != null ? ` · entry ${s.entry}` : ""}`,
+              href: "/signals",
+              createdAt: Date.now(),
+              read: false,
+            });
           }
         }
       } catch {
-        /* API offline */
+        /* offline */
       }
 
       try {
@@ -226,18 +290,15 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
             if (ev.impact !== "high") continue;
             const t = new Date(ev.time).getTime();
             if (Number.isNaN(t)) continue;
-            if (t < now - 60_000 || t > now + 24 * 60 * 60 * 1000) continue;
-            const id = `news:${ev.id}`;
-            if (seen.has(id)) continue;
-            seen.add(id);
+            if (t < now - 15 * 60_000 || t > now + 2 * 60 * 60_000) continue;
             const when = new Date(ev.time).toLocaleString(undefined, {
               month: "short",
               day: "numeric",
               hour: "2-digit",
               minute: "2-digit",
             });
-            fresh.push({
-              id,
+            pushOne({
+              id: `news:${ev.id}`,
               kind: "news",
               title: `High impact · ${ev.currency ?? "Market"}`,
               body: `${ev.event} · ${when}`,
@@ -250,18 +311,15 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
       } catch {
         /* ignore */
       }
-
-      saveSeen(seen);
-      if (fresh.length) pushMany(fresh);
     }
 
     void poll();
-    const timer = window.setInterval(() => void poll(), 45_000);
+    const timer = window.setInterval(() => void poll(), 60_000);
     return () => {
       cancelled = true;
       window.clearInterval(timer);
     };
-  }, [favorites, hydrated, pushMany]);
+  }, [favorites, hydrated, live, pushOne]);
 
   const unread = useMemo(
     () => items.filter((i) => !i.read).length,
@@ -288,6 +346,7 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
     clearAll,
     open,
     setOpen,
+    live,
   };
 
   return (
@@ -306,7 +365,7 @@ export function useNotifications(): NotificationsContextValue {
 }
 
 export function NotificationBell() {
-  const { unread, open, setOpen, items, markAllRead, markRead, clearAll } =
+  const { unread, open, setOpen, items, markAllRead, markRead, clearAll, live } =
     useNotifications();
 
   return (
@@ -336,6 +395,10 @@ export function NotificationBell() {
         {unread > 0 && (
           <span className="notif-badge">{unread > 9 ? "9+" : unread}</span>
         )}
+        <span
+          className={`notif-live-dot${live ? " on" : ""}`}
+          title={live ? "Live alerts" : "Alerts offline"}
+        />
       </button>
 
       {open && (
@@ -348,7 +411,12 @@ export function NotificationBell() {
           />
           <div className="notif-panel" role="dialog" aria-label="Notifications">
             <div className="notif-panel-head">
-              <strong>Alerts</strong>
+              <strong>
+                Alerts{" "}
+                <span className={`notif-live-label${live ? " on" : ""}`}>
+                  {live ? "· live" : "· offline"}
+                </span>
+              </strong>
               <div className="notif-panel-actions">
                 <button type="button" className="text-button" onClick={markAllRead}>
                   Read all
