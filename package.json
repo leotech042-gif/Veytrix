@@ -9,7 +9,7 @@
     "dev": "corepack pnpm --filter @veytrix/shared build && corepack pnpm --recursive --parallel --filter @veytrix/api --filter @veytrix/web dev",
     "build": "corepack pnpm --filter @veytrix/shared build && corepack pnpm --filter @veytrix/api build && corepack pnpm --filter @veytrix/web build",
     "lint": "corepack pnpm --filter @veytrix/shared lint && corepack pnpm --filter @veytrix/api lint && corepack pnpm --filter @veytrix/web lint",
-    "typecheck": "corepack pnpm --filter @veytrix/shared typecheck && corepack pnpm --filter @veytrix/api typecheck && corepack pnpm --filter @veytrix/web typecheck",
+    "typecheck": "corepack pnpm --filter @veytrix/shared build && corepack pnpm --filter @veytrix/api typecheck && corepack pnpm --filter @veytrix/web typecheck",
     "mobile": "corepack pnpm --filter @veytrix/mobile start"
   },
   "devDependencies": {
