@@ -423,7 +423,6 @@ export function MarketWatch({
 
       {feed.status?.state === "connected" && (
         <div className="mw-provider-line" role="status">
-          <span className="mw-live-dot" />
           <span>{feed.status.provider}</span>
           <span className="mw-provider-separator">·</span>
           <span>{feed.status.delayed ? "Delayed feed" : "Provider connected"}</span>
