@@ -29,7 +29,8 @@ export function Dashboard() {
     void loadSignals();
   }, [loadSignals]);
 
-  const topBias = signals.find((signal) => signal.type === "bias");
+  const topBias =
+    signals.find((signal) => signal.type === "bias") ?? signals[0];
 
 
   const connected = feed.status?.state === "connected";
