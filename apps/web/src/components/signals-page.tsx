@@ -188,10 +188,7 @@ export function SignalsPage() {
 
             <div className="vx-sig-title">
               <strong>{signal.instrument}</strong>
-              <span className={`vx-sig-dir ${isBuy ? "buy" : isSell ? "sell" : "bias"}`}>
-                {isSell ? "↓ " : isBuy ? "↑ " : ""}
-                {dir}
-              </span>
+
             </div>
 
             {signal.summary && <p className="vx-sig-summary">{signal.summary}</p>}
