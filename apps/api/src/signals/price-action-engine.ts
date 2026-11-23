@@ -460,6 +460,136 @@ function findFreshZones(
   );
 }
 
+interface FlipLevel {
+  level: number;
+  bandTop: number;
+  bandBottom: number;
+}
+
+function findFlipLevel(
+  candles: MarketCandle[],
+  direction: Direction,
+  atr: number,
+  requireRetest: boolean,
+  currentPrice: number,
+): FlipLevel | null {
+  if (candles.length < 32 || atr <= 0) return null;
+  const swingKind = direction === "bullish" ? "high" : "low";
+  const swings = findSwings(candles.slice(0, -1)).filter(
+    (swing) => swing.kind === swingKind,
+  );
+  const tolerance = atr * 0.12;
+  const candidates = swings
+    .map((swing) => {
+      const nearby = swings.filter(
+        (candidate) => Math.abs(candidate.price - swing.price) <= tolerance,
+      );
+      return {
+        level:
+          nearby.reduce((sum, candidate) => sum + candidate.price, 0) /
+          nearby.length,
+        count: nearby.length,
+        lastTouch: Math.max(...nearby.map((candidate) => candidate.index)),
+      };
+    })
+    .filter((candidate) => candidate.count >= 3)
+    .sort((a, b) => b.count - a.count || b.lastTouch - a.lastTouch);
+
+  for (const candidate of candidates) {
+    const bandBottom = candidate.level - tolerance;
+    const bandTop = candidate.level + tolerance;
+    const breakoutIndex = candles.findIndex((candle, index) => {
+      if (index < Math.max(0, candles.length - 8)) return false;
+      return direction === "bullish"
+        ? candle.close > bandTop
+        : candle.close < bandBottom;
+    });
+    if (breakoutIndex < 0) continue;
+
+    const afterBreak = candles.slice(breakoutIndex + 1);
+    if (
+      afterBreak.some((candle) =>
+        direction === "bullish"
+          ? candle.close < bandBottom
+          : candle.close > bandTop,
+      )
+    ) {
+      continue;
+    }
+
+    if (
+      requireRetest &&
+      !(
+        currentPrice >= bandBottom &&
+        currentPrice <= bandTop &&
+        (direction === "bullish"
+          ? candles[candles.length - 1].low <= bandTop
+          : candles[candles.length - 1].high >= bandBottom)
+      )
+    ) {
+      continue;
+    }
+
+    return { level: candidate.level, bandTop, bandBottom };
+  }
+  return null;
+}
+
+function hasWickOverlap(
+  candle: MarketCandle,
+  zoneBottom: number,
+  zoneTop: number,
+): boolean {
+  const bodyTop = Math.max(candle.open, candle.close);
+  const bodyBottom = Math.min(candle.open, candle.close);
+  const lowerOverlap =
+    Math.min(bodyBottom, zoneTop) - Math.max(candle.low, zoneBottom);
+  const upperOverlap =
+    Math.min(candle.high, zoneTop) - Math.max(bodyTop, zoneBottom);
+  return lowerOverlap > 0 || upperOverlap > 0;
+}
+
+function hasFlipType2(
+  h4: MarketCandle[],
+  d1: MarketCandle[],
+  direction: Direction,
+): boolean {
+  const atr = averageRange(h4.slice(-14));
+  const flip = findFlipLevel(h4, direction, atr, false, 0);
+  if (!flip || d1.length < 2) return false;
+  return d1.some((candle) =>
+    hasWickOverlap(candle, flip.bandBottom, flip.bandTop),
+  );
+}
+
+function hasRecentStructureShift(
+  candles: MarketCandle[],
+  direction: Direction,
+): boolean {
+  if (candles.length < 24) return false;
+  const start = Math.max(10, candles.length - 6);
+  for (let index = candles.length - 1; index >= start; index -= 1) {
+    const prior = candles.slice(0, index);
+    const swings = findSwings(prior);
+    const structural = swings.filter((swing) =>
+      direction === "bullish"
+        ? swing.kind === "high"
+        : swing.kind === "low",
+    );
+    const level = structural[structural.length - 1]?.price;
+    if (level === undefined) continue;
+    if (
+      isDisplacement(candles[index], prior, direction) &&
+      (direction === "bullish"
+        ? candles[index].close > level
+        : candles[index].close < level)
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
 function isRejectionCandle(
   candle: MarketCandle,
   direction: Direction,
@@ -823,6 +953,15 @@ export function analysePriceAction(
   const takeProfit1 = round(input.price + sign * risk * 2);
   const takeProfit2 = round(input.price + sign * risk * 3.5);
   const takeProfit = round(target);
+  const h4Atr = averageRange(h4.slice(-14));
+  const h1Atr = averageRange(h1.slice(-14));
+  const h4Engineering = findSweep(h4, direction, h4Atr);
+  const h1Engineering = findSweep(h1, direction, h1Atr);
+  const flipType1 = findFlipLevel(h4, direction, h4Atr, true, input.price);
+  const flipType2 = hasFlipType2(h4, d1, direction);
+  const ftaShiftConfirmed =
+    hasRecentStructureShift(h1, direction) &&
+    h4Structure.direction === direction;
   const tags = [
     ...(sweep
       ? [
@@ -833,15 +972,17 @@ export function analysePriceAction(
           "SHIFT_ENTRY",
           ...(sweep.source === "EQUAL_LEVELS" ? ["EQUAL_HIGHS_OR_LOWS"] : []),
           ...(sweep.source === "ASIAN_RANGE" ? ["ASIAN_SESSION_LIQUIDITY"] : []),
+          ...(h4Engineering && h1Engineering ? ["LIQUIDITY_ENGINEERING_MTF"] : []),
         ]
       : []),
     ...(shiftIndex !== null ? ["DISPLACEMENT", "MSS", "STRUCTURE_SHIFT"] : []),
     ...(zone.kind === "FVG" ? ["FVG", "AOL_RETEST"] : []),
     ...(zone.kind === "ORDER_BLOCK" ? ["ORDER_BLOCK", "MITIGATION_CHECK"] : []),
     ...(zone.kind === "BREAKER_BLOCK" ? ["BREAKER_BLOCK", "MITIGATION_CHECK"] : []),
-    ...(zone.kind === "RETEST"
-      ? ["PURE_PRICE_ACTION", "BREAK_RETEST", ...(breakRetest && breakRetest.touches >= 2 ? ["FLIP_TYPE_1"] : [])]
-      : []),
+    ...(zone.kind === "RETEST" ? ["PURE_PRICE_ACTION", "BREAK_RETEST"] : []),
+    ...(flipType1 ? ["APA_FLIP_TYPE_1"] : []),
+    ...(flipType2 ? ["APA_FLIP_TYPE_2_WICK_OVERLAP"] : []),
+    ...(ftaShiftConfirmed ? ["APA_FTA_ENTRY_CONFIRMED"] : []),
     ...(zone.fill < 0.5 ? ["FRESH_ZONE_UNDER_50_PERCENT_MITIGATION"] : []),
     ...(inCorrectHalf ? [direction === "bullish" ? "DISCOUNT" : "PREMIUM"] : []),
     ...(direction === "bullish"
