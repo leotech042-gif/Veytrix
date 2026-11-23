@@ -122,7 +122,7 @@ export class FfCalendarFundamentalsProvider implements FundamentalsProvider {
       const t = new Date(e.time).getTime();
       if (Number.isNaN(t)) return false;
       if (fromMs != null && !Number.isNaN(fromMs) && t < fromMs) return false;
-      if (toMs != null && !Number.isNaN(toMs) && t > toMs + 24 * 60 * 60_000)
+      if (toMs != null && !Number.isNaN(toMs) && t >= toMs)
         return false;
       return true;
     });
