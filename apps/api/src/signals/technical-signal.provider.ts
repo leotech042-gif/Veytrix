@@ -302,15 +302,22 @@ export class TechnicalSignalProvider implements SignalProvider {
       return [{ event, pair, timestamp }];
     });
 
-    const recent = pairEvents.filter(
-      ({ event, pair, timestamp }) =>
+    const recent = pairEvents.filter(({ event, pair, timestamp }) => {
+      const name = event.event.toLowerCase();
+      const directionallyReadable =
+        /gross domestic product|\bgdp\b|nonfarm payroll|employment change|employment report|unemployment|jobless claims|initial claims|continuing claims|retail sales|industrial production|manufacturing pmi|services pmi|\bpmi\b|consumer confidence|trade balance|current account|durable goods|housing starts|business confidence|average hourly earnings/.test(name) &&
+        !/inflation|\bcpi\b|\bppi\b|\bpce\b|interest rate|rate decision|central bank|minutes|speech|press conference/.test(name);
+
+      return (
         timestamp <= now &&
         now - timestamp <= 48 * 60 * 60_000 &&
         event.actual !== null &&
         event.estimate !== null &&
         pair.bias !== "pending" &&
-        pair.bias !== "neutral",
-    );
+        pair.bias !== "neutral" &&
+        directionallyReadable
+      );
+    });
 
     let macroRead: string;
     if (recent.length === 0) {
@@ -340,11 +347,11 @@ export class TechnicalSignalProvider implements SignalProvider {
         .map(({ event }) => event.currency + " " + event.event)
         .join("; ");
       macroRead =
-        "Recent released calendar data is " +
+        "Recent interpretable economic releases lean " +
         direction +
         " for " +
         instrument +
-        " (" +
+        " based on actual-versus-forecast growth and labour data (" +
         names +
         ").";
     }
