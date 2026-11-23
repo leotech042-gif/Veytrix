@@ -452,8 +452,8 @@ export function MarketWatch({
       lastDay === today
         ? candles[candles.length - 2].close
         : lastCandle.close;
-    const currentPrice = quote?.last ?? quote?.bid ?? quote?.ask ?? lastCandle.close;
-    if (!Number.isFinite(currentPrice) || !Number.isFinite(base) || base <= 0) return null;
+    const currentPrice = quote?.last ?? quote?.bid ?? quote?.ask;
+    if (currentPrice === undefined || !Number.isFinite(currentPrice) || !Number.isFinite(base) || base <= 0) return null;
     return ((currentPrice - base) / base) * 100;
   }
 
