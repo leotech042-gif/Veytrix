@@ -19,6 +19,7 @@ import {
   getMarketQuotes,
   getMarketStatus,
   MarketDataApiError,
+  getMarketHistory,
 } from "@/lib/market-data-api";
 
 const categories: { value: MarketCategory | "all"; label: string }[] = [
@@ -269,6 +270,56 @@ function formatTime(value: string): string {
   }).format(date);
 }
 
+function categoryLabel(category: MarketCategory): string {
+  const labels: Record<MarketCategory, string> = {
+    forex: "Forex",
+    metals: "Metals",
+    crypto: "Crypto",
+    indices: "Indices",
+    energy: "Energy",
+    synthetic: "Synthetic",
+    other: "Other",
+  };
+  return labels[category];
+}
+
+function categoryMark(category: MarketCategory): string {
+  const marks: Record<MarketCategory, string> = {
+    forex: "FX",
+    metals: "Au",
+    crypto: "₿",
+    indices: "IDX",
+    energy: "EN",
+    synthetic: "SYN",
+    other: "MKT",
+  };
+  return marks[category];
+}
+
+function Sparkline({ values }: { values: number[] | undefined }) {
+  if (!values || values.length < 2) {
+    return <span className="mw-spark-empty" aria-label="Historical trend unavailable">—</span>;
+  }
+
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const range = max - min || 1;
+  const points = values
+    .map((value, index) => {
+      const x = (index / (values.length - 1)) * 100;
+      const y = 26 - ((value - min) / range) * 22;
+      return `${x},${y}`;
+    })
+    .join(" ");
+  const rising = values[values.length - 1] >= values[0];
+
+  return (
+    <svg className={`mw-sparkline ${rising ? "is-up" : "is-down"}`} viewBox="0 0 100 30" role="img" aria-label={rising ? "Historical price trend rising" : "Historical price trend falling"}>
+      <polyline points={points} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
 export function MarketWatch({
   feed,
   favoritesOnly = false,
@@ -281,26 +332,58 @@ export function MarketWatch({
   const { favorites, toggle } = useMarketFavorites();
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState<MarketCategory | "all">("all");
+  const [historyBySymbol, setHistoryBySymbol] = useState<Record<string, number[]>>({});
 
   const filtered = useMemo(() => {
     const query = search.trim().toLocaleLowerCase();
-    const isSearching = query.length > 0;
-
     return feed.instruments.filter((instrument) => {
       const matchesQuery =
         !query ||
         instrument.symbol.toLocaleLowerCase().includes(query) ||
         instrument.displayName.toLocaleLowerCase().includes(query);
-
       const matchesCategory =
         category === "all" || instrument.category === category;
-
       const matchesFavorite =
-        isSearching || favorites.includes(instrument.symbol);
-
+        !favoritesOnly || favorites.includes(instrument.symbol);
       return matchesQuery && matchesCategory && matchesFavorite;
     });
-  }, [category, favorites, feed.instruments, search]);
+  }, [category, favorites, favoritesOnly, feed.instruments, search]);
+
+  const visibleInstruments = compact ? filtered.slice(0, 6) : filtered;
+  const historySymbols = useMemo(
+    () => visibleInstruments.slice(0, 12).map((item) => item.symbol),
+    [visibleInstruments],
+  );
+  const historyKey = historySymbols.join("|");
+
+  useEffect(() => {
+    if (feed.status?.state !== "connected" || historySymbols.length === 0) {
+      setHistoryBySymbol({});
+      return;
+    }
+
+    let active = true;
+    Promise.all(
+      historySymbols.map(async (symbol) => {
+        try {
+          const candles = await getMarketHistory(symbol, "H1");
+          const closes = candles
+            .filter((candle) => Number.isFinite(candle.close))
+            .slice(-24)
+            .map((candle) => candle.close);
+          return [symbol, closes] as const;
+        } catch {
+          return [symbol, []] as const;
+        }
+      }),
+    ).then((entries) => {
+      if (active) setHistoryBySymbol(Object.fromEntries(entries));
+    });
+
+    return () => {
+      active = false;
+    };
+  }, [feed.status?.state, historyKey, historySymbols]);
 
   const quoteBySymbol = useMemo(
     () =>
@@ -313,361 +396,226 @@ export function MarketWatch({
     [feed.quotes],
   );
 
+  const categoriesToShow = categories.filter(
+    (item) => item.value === "all" || item.value !== "synthetic" || feed.instruments.some((instrument) => instrument.category === "synthetic"),
+  );
+
   return (
-    <section className={`panel${compact ? " compact-panel" : ""}`}>
-      <div className="panel-heading">
+    <section className={`panel mw-panel${compact ? " compact-panel mw-compact" : ""}`}>
+      <div className="mw-header">
         <div>
-          <h2>
-            {favoritesOnly ? "Favourite markets" : "Quotes & market watch"}
-          </h2>
-          <p className="panel-description">
-            Broker-independent quotes and instruments from the configured
-            market-data provider.
+          <div className="mw-eyebrow">MARKET INTELLIGENCE</div>
+          <h2>{favoritesOnly ? "Your watchlist" : "Market watch"}</h2>
+          <p className="mw-subtitle">
+            Live instruments and pricing from your connected market-data provider.
           </p>
         </div>
-        <button
-          className="text-button"
-          type="button"
-          onClick={feed.refresh}
-          disabled={feed.refreshing}
-        >
-          {feed.refreshing ? "Checking…" : "Refresh"}
-        </button>
+        <div className="mw-header-actions">
+          <span className="mw-count">{filtered.length} instruments</span>
+          <button className="mw-refresh" type="button" onClick={feed.refresh} disabled={feed.refreshing}>
+            <span aria-hidden="true">↻</span> {feed.refreshing ? "Updating" : "Refresh"}
+          </button>
+        </div>
       </div>
 
       {feed.status?.state === "connected" && (
-        <p className="market-feed-status" role="status">
-          Market data from <strong>{feed.status.provider}</strong>
-          {feed.status.updatedAt
-            ? ` · connection checked ${formatTime(feed.status.updatedAt)}`
-            : ""}
-          {feed.status.delayed ? " · delayed" : ""}
-        </p>
+        <div className="mw-provider-line" role="status">
+          <span className="mw-live-dot" />
+          <span>{feed.status.provider}</span>
+          <span className="mw-provider-separator">·</span>
+          <span>{feed.status.delayed ? "Delayed feed" : "Provider connected"}</span>
+          {feed.status.updatedAt && <time dateTime={feed.status.updatedAt}>Checked {formatTime(feed.status.updatedAt)}</time>}
+        </div>
       )}
 
       {feed.status?.state === "connected" && (
-        <div className="market-filters">
-          <label className="search-field">
-            <span aria-hidden="true">⌕</span>
-            <span className="visually-hidden">Search instruments</span>
-            <input
-              type="search"
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              placeholder="Search any pair to add to favourites…"
-            />
-          </label>
+        <>
+          <div className="mw-toolbar">
+            <label className="mw-search">
+              <span aria-hidden="true">⌕</span>
+              <span className="visually-hidden">Search instruments</span>
+              <input
+                type="search"
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                placeholder="Search symbol or instrument…"
+              />
+              <kbd>/</kbd>
+            </label>
+            <button
+              className={`mw-favorites-toggle${favoritesOnly ? " active" : ""}`}
+              type="button"
+              onClick={() => {
+                if (favoritesOnly) setSearch("");
+              }}
+              aria-pressed={favoritesOnly}
+              title={favoritesOnly ? "Showing favourites" : "Use the favourites page to view only saved instruments"}
+            >
+              <span aria-hidden="true">★</span> {favorites.length} saved
+            </button>
+          </div>
 
           {!favoritesOnly && (
-            <label className="select-field">
-              <span className="visually-hidden">Filter by market category</span>
-              <select
-                value={category}
-                onChange={(event) =>
-                  setCategory(event.target.value as MarketCategory | "all")
-                }
-              >
-                {categories.map((item) => (
-                  <option key={item.value} value={item.value}>
-                    {item.label}
-                  </option>
-                ))}
-              </select>
-            </label>
+            <div className="mw-category-list" aria-label="Market categories">
+              {categoriesToShow.map((item) => (
+                <button
+                  key={item.value}
+                  className={`mw-category-chip${category === item.value ? " active" : ""}`}
+                  type="button"
+                  onClick={() => setCategory(item.value)}
+                  aria-pressed={category === item.value}
+                >
+                  {item.label}
+                </button>
+              ))}
+            </div>
           )}
-
-        </div>
+        </>
       )}
 
-      {feed.error && (
-        <div className="inline-error" role="alert">
-          {feed.error}
-        </div>
-      )}
-
+      {feed.error && <div className="inline-error" role="alert">{feed.error}</div>}
       {feed.status?.state === "unconfigured" && (
         <div className="empty-state" role="status">
-          <span className="empty-state-icon" aria-hidden="true">
-            ◈
-          </span>
+          <span className="empty-state-icon" aria-hidden="true">◈</span>
           <h3>No market provider connected</h3>
-          <p>
-            Instruments are discovered from your provider. Configure a licensed
-            market-data feed in the API to populate this list.
-          </p>
-          <Link className="secondary-button" href="/settings">
-            View connection settings
-          </Link>
+          <p>Instruments are discovered from your provider. Configure a licensed market-data feed in the API to populate this list.</p>
+          <Link className="secondary-button" href="/settings">View connection settings</Link>
+        </div>
+      )}
+      {feed.status?.state === "disconnected" && <div className="inline-error" role="status">{feed.status.message}</div>}
+      {feed.instrumentError && <div className="inline-error" role="alert">Instrument list unavailable: {feed.instrumentError}</div>}
+      {feed.quoteError && <div className="inline-error" role="alert">Latest quotes unavailable: {feed.quoteError}</div>}
+      {feed.loading && <div className="mw-loading" role="status"><span className="mw-loading-pulse" /> Loading provider instruments and quotes…</div>}
+
+      {!feed.loading && feed.status?.state === "connected" && visibleInstruments.length === 0 && (
+        <div className="mw-empty" role="status">
+          <span aria-hidden="true">⌕</span>
+          <strong>{favoritesOnly ? "Your watchlist is empty" : "No instruments found"}</strong>
+          <p>{favoritesOnly ? "Search the full market list and save instruments with the star." : "Try another symbol or market category."}</p>
         </div>
       )}
 
-      {feed.status?.state === "disconnected" && (
-        <div className="inline-error" role="status">
-          {feed.status.message}
-        </div>
-      )}
+      {visibleInstruments.length > 0 && (
+        <>
+          <div className="mw-table-wrap">
+            <table className="mw-table">
+              <thead>
+                <tr>
+                  <th scope="col">Instrument</th>
+                  <th scope="col">Last price</th>
+                  <th scope="col">24h change</th>
+                  <th scope="col">Trend · 1H</th>
+                  <th scope="col">Bid / Ask</th>
+                  <th scope="col">Spread</th>
+                  <th scope="col"><span className="visually-hidden">Save</span></th>
+                </tr>
+              </thead>
+              <tbody>
+                {visibleInstruments.map((instrument) => {
+                  const quote = quoteBySymbol.get(instrument.symbol.toLocaleUpperCase());
+                  const price = quote?.last ?? quote?.bid ?? quote?.ask;
+                  const spread = quote?.spread ?? (quote?.bid !== undefined && quote.ask !== undefined ? quote.ask - quote.bid : undefined);
+                  const change = quote?.changePercent;
+                  const positive = change !== undefined && change >= 0;
+                  const isFavorite = favorites.includes(instrument.symbol);
 
-      {feed.instrumentError && (
-        <div className="inline-error" role="alert">
-          Instrument list unavailable: {feed.instrumentError}
-        </div>
-      )}
-
-      {feed.quoteError && (
-        <div className="inline-error" role="alert">
-          Latest quotes unavailable: {feed.quoteError}
-        </div>
-      )}
-
-      {feed.loading && (
-        <div className="empty-state compact-empty" role="status">
-          Checking provider instruments…
-        </div>
-      )}
-
-      {!feed.loading &&
-        feed.status?.state === "connected" &&
-        !feed.instrumentError &&
-        filtered.length === 0 && (
-          <div className="empty-state compact-empty" role="status">
-            {feed.instruments.length === 0
-              ? "The connected provider has not returned any supported instruments."
-              : favorites.length === 0 && !search
-                ? "No favourites yet. Type a pair name above and click the star to add it."
-                : "No favourite instruments match this search."}
+                  return (
+                    <tr key={instrument.symbol}>
+                      <th scope="row">
+                        <div className="mw-instrument">
+                          <span className={`mw-asset-mark mw-asset-${instrument.category}`}>{categoryMark(instrument.category)}</span>
+                          <span className="mw-instrument-copy">
+                            <Link href={`/charts?symbol=${encodeURIComponent(instrument.symbol)}`} className="mw-symbol">{instrument.symbol}</Link>
+                            <span className="mw-instrument-name">{instrument.displayName}</span>
+                            <span className="mw-category-label">{categoryLabel(instrument.category)}</span>
+                          </span>
+                        </div>
+                      </th>
+                      <td className="mw-price-cell">
+                        <strong>{price === undefined ? "—" : formatPrice(price, instrument)}</strong>
+                        <span>{quote ? (quote.delayed ? "Delayed quote" : "Latest quote") : "Quote unavailable"}</span>
+                      </td>
+                      <td>
+                        {change === undefined ? <span className="mw-muted">—</span> : (
+                          <span className={`mw-change ${positive ? "positive" : "negative"}`}>
+                            <span aria-hidden="true">{positive ? "↗" : "↘"}</span>
+                            {positive ? "+" : ""}{change.toFixed(2)}%
+                          </span>
+                        )}
+                      </td>
+                      <td><Sparkline values={historyBySymbol[instrument.symbol]} /></td>
+                      <td className="mw-bidask">
+                        <span>{quote?.bid === undefined ? "—" : formatPrice(quote.bid, instrument)}</span>
+                        <span>{quote?.ask === undefined ? "—" : formatPrice(quote.ask, instrument)}</span>
+                      </td>
+                      <td>{spread === undefined ? <span className="mw-muted">—</span> : formatPrice(spread, instrument)}</td>
+                      <td>
+                        <button
+                          className={`mw-star${isFavorite ? " selected" : ""}`}
+                          type="button"
+                          aria-label={`${isFavorite ? "Remove" : "Add"} ${instrument.symbol} ${isFavorite ? "from" : "to"} favourites`}
+                          aria-pressed={isFavorite}
+                          onClick={() => toggle(instrument.symbol)}
+                        >{isFavorite ? "★" : "☆"}</button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
-        )}
 
-      {filtered.length > 0 && (
-        <div className="market-table-wrap">
-          <table className="market-table">
-            <thead>
-              <tr>
-                <th scope="col">Instrument</th>
-                <th scope="col">Bid</th>
-                <th scope="col">Ask</th>
-                <th scope="col">Last</th>
-                <th scope="col">Spread</th>
-                <th scope="col">Change</th>
-                <th scope="col">Updated</th>
-                <th scope="col">
-                  <span className="visually-hidden">Favourite</span>
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((instrument) => {
-                const quote = quoteBySymbol.get(
-                  instrument.symbol.toLocaleUpperCase(),
-                );
-                const spread =
-                  quote?.spread ??
-                  (quote?.bid !== undefined && quote.ask !== undefined
-                    ? quote.ask - quote.bid
-                    : undefined);
-                const change =
-                  quote?.change === undefined
-                    ? null
-                    : formatPrice(quote.change, instrument);
-                const changePercent =
-                  quote?.changePercent === undefined
-                    ? null
-                    : `${quote.changePercent > 0 ? "+" : ""}${quote.changePercent.toFixed(2)}%`;
+          <div className="mw-mobile-list">
+            {visibleInstruments.map((instrument) => {
+              const quote = quoteBySymbol.get(instrument.symbol.toLocaleUpperCase());
+              const price = quote?.last ?? quote?.bid ?? quote?.ask;
+              const spread = quote?.spread ?? (quote?.bid !== undefined && quote.ask !== undefined ? quote.ask - quote.bid : undefined);
+              const change = quote?.changePercent;
+              const positive = change !== undefined && change >= 0;
+              const isFavorite = favorites.includes(instrument.symbol);
 
-                return (
-                  <tr key={instrument.symbol}>
-                    <th scope="row">
-                      <Link
-                        href={`/charts?symbol=${instrument.symbol}`}
-                        className="instrument-link"
-                        style={{
-                          textDecoration: "none",
-                          color: "inherit",
-                          display: "block",
-                        }}
-                      >
-                        <span className="instrument-pair">
-                          {instrument.symbol}
-                        </span>
-                        <span className="instrument-name">
-                          {instrument.displayName}
-                        </span>
-                      </Link>
-                    </th>
-                    <td>
-                      {quote?.bid === undefined
-                        ? "—"
-                        : formatPrice(quote.bid, instrument)}
-                    </td>
-                    <td>
-                      {quote?.ask === undefined
-                        ? "—"
-                        : formatPrice(quote.ask, instrument)}
-                    </td>
-                    <td>
-                      {quote?.last === undefined
-                        ? "—"
-                        : formatPrice(quote.last, instrument)}
-                    </td>
-                    <td>
-                      {spread === undefined
-                        ? "—"
-                        : formatPrice(spread, instrument)}
-                    </td>
-                    <td>
-                      {change || changePercent
-                        ? [change, changePercent].filter(Boolean).join(" · ")
-                        : "—"}
-                    </td>
-                    <td>
-                      {quote ? (
-                        <time dateTime={quote.asOf}>
-                          {formatTime(quote.asOf)}
-                        </time>
-                      ) : (
-                        <span className="instrument-state">
-                          Quote unavailable
-                        </span>
-                      )}
-                      {quote?.delayed && (
-                        <span className="instrument-state">Delayed</span>
-                      )}
-                    </td>
-                    <td>
-                      <button
-                        className={`favorite-button${
-                          favorites.includes(instrument.symbol)
-                            ? " selected"
-                            : ""
-                        }`}
-                        type="button"
-                        aria-label={`${
-                          favorites.includes(instrument.symbol)
-                            ? "Remove"
-                            : "Add"
-                        } ${instrument.symbol} ${
-                          favorites.includes(instrument.symbol) ? "from" : "to"
-                        } favourites`}
-                        aria-pressed={favorites.includes(instrument.symbol)}
-                        onClick={() => toggle(instrument.symbol)}
-                      >
-                        {favorites.includes(instrument.symbol) ? "★" : "☆"}
-                      </button>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      {filtered.length > 0 && (
-        <div className="market-cards">
-          {filtered.map((instrument) => {
-            const quote = quoteBySymbol.get(
-              instrument.symbol.toLocaleUpperCase(),
-            );
-            const spread =
-              quote?.spread ??
-              (quote?.bid !== undefined && quote.ask !== undefined
-                ? quote.ask - quote.bid
-                : undefined);
-            const isFavorite = favorites.includes(instrument.symbol);
-
-            return (
-              <article className="quote-card" key={instrument.symbol}>
-                <div className="quote-card-heading">
-                  <div>
-                    <Link
-                      href={`/charts?symbol=${instrument.symbol}`}
-                      style={{ textDecoration: "none", color: "inherit" }}
-                    >
-                      <strong>{instrument.symbol}</strong>
-                      <span>{instrument.displayName}</span>
-                    </Link>
+              return (
+                <article className="mw-mobile-card" key={instrument.symbol}>
+                  <div className="mw-mobile-top">
+                    <div className="mw-instrument">
+                      <span className={`mw-asset-mark mw-asset-${instrument.category}`}>{categoryMark(instrument.category)}</span>
+                      <span className="mw-instrument-copy">
+                        <Link href={`/charts?symbol=${encodeURIComponent(instrument.symbol)}`} className="mw-symbol">{instrument.symbol}</Link>
+                        <span className="mw-instrument-name">{instrument.displayName}</span>
+                      </span>
+                    </div>
+                    <button className={`mw-star${isFavorite ? " selected" : ""}`} type="button" aria-label={`${isFavorite ? "Remove" : "Add"} ${instrument.symbol} ${isFavorite ? "from" : "to"} favourites`} aria-pressed={isFavorite} onClick={() => toggle(instrument.symbol)}>
+                      {isFavorite ? "★" : "☆"}
+                    </button>
                   </div>
-                  <button
-                    className={`favorite-button${isFavorite ? " selected" : ""}`}
-                    type="button"
-                    aria-label={`${
-                      isFavorite ? "Remove" : "Add"
-                    } ${instrument.symbol} ${
-                      isFavorite ? "from" : "to"
-                    } favourites`}
-                    aria-pressed={isFavorite}
-                    onClick={() => toggle(instrument.symbol)}
-                  >
-                    {isFavorite ? "★" : "☆"}
-                  </button>
-                </div>
-                <div className="quote-card-prices">
-                  <div>
-                    <span>Bid</span>
-                    <strong>
-                      {quote?.bid === undefined
-                        ? "—"
-                        : formatPrice(quote.bid, instrument)}
-                    </strong>
+                  <div className="mw-mobile-price-row">
+                    <div className="mw-mobile-price">
+                      <span>LAST PRICE</span>
+                      <strong>{price === undefined ? "—" : formatPrice(price, instrument)}</strong>
+                    </div>
+                    {change === undefined ? <span className="mw-muted">Change —</span> : (
+                      <span className={`mw-change ${positive ? "positive" : "negative"}`}>{positive ? "+" : ""}{change.toFixed(2)}%</span>
+                    )}
                   </div>
-                  <div>
-                    <span>Ask</span>
-                    <strong>
-                      {quote?.ask === undefined
-                        ? "—"
-                        : formatPrice(quote.ask, instrument)}
-                    </strong>
+                  <div className="mw-mobile-bottom">
+                    <span>Bid <strong>{quote?.bid === undefined ? "—" : formatPrice(quote.bid, instrument)}</strong></span>
+                    <span>Ask <strong>{quote?.ask === undefined ? "—" : formatPrice(quote.ask, instrument)}</strong></span>
+                    <span>Spread <strong>{spread === undefined ? "—" : formatPrice(spread, instrument)}</strong></span>
+                    <Sparkline values={historyBySymbol[instrument.symbol]} />
                   </div>
-                  <div>
-                    <span>Last</span>
-                    <strong>
-                      {quote?.last === undefined
-                        ? "—"
-                        : formatPrice(quote.last, instrument)}
-                    </strong>
+                  <div className="mw-mobile-timestamp">
+                    {quote ? <time dateTime={quote.asOf}>{formatTime(quote.asOf)}</time> : "Quote unavailable"}
+                    {quote?.delayed && <span>Delayed</span>}
                   </div>
-                </div>
-                <div className="quote-card-meta">
-                  <span>
-                    Spread{" "}
-                    {spread === undefined
-                      ? "—"
-                      : formatPrice(spread, instrument)}
-                  </span>
-                  <span>
-                    Change{" "}
-                    {quote?.change === undefined
-                      ? "—"
-                      : formatPrice(quote.change, instrument)}
-                    {quote?.changePercent === undefined
-                      ? ""
-                      : ` · ${quote.changePercent > 0 ? "+" : ""}${quote.changePercent.toFixed(2)}%`}
-                  </span>
-                </div>
-                <div className="quote-card-time">
-                  {quote ? (
-                    <>
-                      <time dateTime={quote.asOf}>
-                        {formatTime(quote.asOf)}
-                      </time>
-                      {quote.delayed && <span>Delayed</span>}
-                    </>
-                  ) : (
-                    <span>Quote unavailable</span>
-                  )}
-                </div>
-              </article>
-            );
-          })}
-        </div>
+                </article>
+              );
+            })}
+          </div>
+        </>
       )}
 
       {feed.status?.state === "connected" && feed.quotes.length > 0 && (
-        <p className="market-data-note">
-          Quote timestamps are supplied by the provider. Refreshing
-          automatically every 30 seconds; provider delays are shown when
-          reported.
-        </p>
+        <p className="mw-footnote">Prices and timestamps are supplied by {feed.status.provider}. Quotes refresh automatically every 30 seconds. Trend lines use provider candle history; unavailable history is never simulated.</p>
       )}
     </section>
   );
