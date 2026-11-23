@@ -48,6 +48,10 @@ interface SetupResult {
   takeProfit1: number;
   takeProfit2: number;
   takeProfit3: number;
+  riskReward1: number;
+  riskReward2: number;
+  riskReward3: number;
+  /** Overall reward-to-risk is measured at TP3. */
   riskReward: number;
   timeframe: ChartTimeframe;
   tags: string[];
@@ -341,17 +345,16 @@ export class TechnicalSignalProvider implements SignalProvider {
     if (
       bestSetup &&
       bestSetup.tags.length >= 2 &&
-      bestSetup.riskReward >= 1.8 &&
+      bestSetup.riskReward3 >= 5 &&
       confidence >= 52
     ) {
-      confidence = Math.min(
-        96,
-        confidence + bestSetup.tags.length * 3 + (bestSetup.riskReward - 2) * 5,
-      );
+      confidence = Math.min(96, confidence + Math.min(10, bestSetup.tags.length * 2));
       reasons.push(
         `Entry ${bestSetup.timeframe}: ${bestSetup.tags.join(" + ")}`,
       );
-      reasons.push(`R:R 1:${bestSetup.riskReward}`);
+      reasons.push(
+        `R:R ladder 1:${bestSetup.riskReward1.toFixed(1)} / 1:${bestSetup.riskReward2.toFixed(1)} / 1:${bestSetup.riskReward3.toFixed(1)}`,
+      );
 
       return {
         id: `${quote.instrument}-setup-${Date.now()}`,
@@ -364,10 +367,15 @@ export class TechnicalSignalProvider implements SignalProvider {
         summary: `${reasons.join(". ")}. ${sessionNote}`,
         entry: bestSetup.entry,
         stopLoss: bestSetup.stopLoss,
+        takeProfit: bestSetup.takeProfit1,
         takeProfit1: bestSetup.takeProfit1,
         takeProfit2: bestSetup.takeProfit2,
         takeProfit3: bestSetup.takeProfit3,
         riskReward: bestSetup.riskReward,
+        riskReward1: bestSetup.riskReward1,
+        riskReward2: bestSetup.riskReward2,
+        riskReward3: bestSetup.riskReward3,
+        tags: bestSetup.tags,
         createdAt: now,
         ...({ marketOpen } as object),
       } as TradingSignal;
@@ -638,32 +646,111 @@ export class TechnicalSignalProvider implements SignalProvider {
     };
   }
 
-  private minRiskDistance(candles: MarketCandle[], mid: number): number {
+  private minRiskDistance(
+    candles: MarketCandle[],
+    _mid: number,
+    precision = 5,
+  ): number {
     const atr = this.avgRange(candles.slice(-14));
-    const floor = mid * 0.0008;
-    return Math.max(atr * 0.55, floor, atr * 0.35);
+    const minimumPriceStep = 10 ** -precision;
+    return Math.max(atr * 0.65, minimumPriceStep * 2);
   }
 
-  private nextStructureTarget(
+  /**
+   * Builds three planned targets at 2R / 3R / 5R.
+   * A confirmed swing level is used when it falls just beyond the relevant R milestone.
+   */
+  private buildTargetLadder(
     candles: MarketCandle[],
     bias: SignalDirection,
     entry: number,
-  ): number | null {
-    const swings = this.findSwings(candles, 2);
-    if (bias === "bullish") {
-      const highs = swings
-        .filter((s) => s.kind === "high" && s.price > entry)
-        .map((s) => s.price);
-      if (highs.length) return Math.min(...highs);
-      const slice = candles.slice(-30);
-      return Math.max(...slice.map((c) => c.high));
+    stopLoss: number,
+    precision: number,
+  ): Pick<
+    SetupResult,
+    | "takeProfit1"
+    | "takeProfit2"
+    | "takeProfit3"
+    | "riskReward1"
+    | "riskReward2"
+    | "riskReward3"
+    | "riskReward"
+  > | null {
+    const risk = Math.abs(entry - stopLoss);
+    if (!Number.isFinite(risk) || risk <= 0 || bias === "neutral") return null;
+
+    const direction = bias === "bullish" ? 1 : -1;
+    const swingKind = bias === "bullish" ? "high" : "low";
+    const swingLevels = this.findSwings(candles, 2)
+      .filter((swing) => swing.kind === swingKind)
+      .map((swing) => +swing.price.toFixed(precision))
+      .filter(
+        (price, index, all) =>
+          direction * (price - entry) > 0 && all.indexOf(price) === index,
+      )
+      .map((price) => ({
+        price,
+        reward: (direction * (price - entry)) / risk,
+      }))
+      .filter((level) => Number.isFinite(level.reward) && level.reward > 0)
+      .sort((a, b) => a.reward - b.reward);
+
+    const scale = 10 ** precision;
+    const roundTowardReward = (price: number) =>
+      direction === 1
+        ? Math.ceil(price * scale - 1e-9) / scale
+        : Math.floor(price * scale + 1e-9) / scale;
+
+    const milestones = [2, 3, 5] as const;
+    const targets = milestones.map((multiple) => {
+      const structuralLevel = swingLevels.find(
+        (level) =>
+          level.reward >= multiple && level.reward <= multiple + 0.75,
+      );
+      const rawTarget =
+        structuralLevel?.price ?? entry + direction * risk * multiple;
+      return roundTowardReward(rawTarget);
+    });
+
+    const [takeProfit1, takeProfit2, takeProfit3] = targets;
+    const correctlyOrdered =
+      direction === 1
+        ? takeProfit1 > entry &&
+          takeProfit2 > takeProfit1 &&
+          takeProfit3 > takeProfit2
+        : takeProfit1 < entry &&
+          takeProfit2 < takeProfit1 &&
+          takeProfit3 < takeProfit2;
+
+    if (!correctlyOrdered) return null;
+
+    const rawRewardRatio = (target: number) =>
+      Math.abs(target - entry) / risk;
+    const rawRiskReward1 = rawRewardRatio(takeProfit1);
+    const rawRiskReward2 = rawRewardRatio(takeProfit2);
+    const rawRiskReward3 = rawRewardRatio(takeProfit3);
+
+    if (
+      rawRiskReward1 < 2 ||
+      rawRiskReward2 < 3 ||
+      rawRiskReward3 < 5
+    ) {
+      return null;
     }
-    const lows = swings
-      .filter((s) => s.kind === "low" && s.price < entry)
-      .map((s) => s.price);
-    if (lows.length) return Math.max(...lows);
-    const slice = candles.slice(-30);
-    return Math.min(...slice.map((c) => c.low));
+
+    const riskReward1 = Math.round(rawRiskReward1 * 10) / 10;
+    const riskReward2 = Math.round(rawRiskReward2 * 10) / 10;
+    const riskReward3 = Math.round(rawRiskReward3 * 10) / 10;
+
+    return {
+      takeProfit1,
+      takeProfit2,
+      takeProfit3,
+      riskReward1,
+      riskReward2,
+      riskReward3,
+      riskReward: riskReward3,
+    };
   }
 
   private buildConfluenceSetup(
@@ -675,56 +762,68 @@ export class TechnicalSignalProvider implements SignalProvider {
   ): SetupResult | null {
     if (bias === "neutral" || candles.length < 20 || mid <= 0) return null;
 
-    const tags: string[] = [];
     const atr = this.avgRange(candles.slice(-14));
-    if (atr <= 0) return null;
+    if (!Number.isFinite(atr) || atr <= 0) return null;
 
-    const fvgs = this.findFvgZones(candles).filter((z) => z.direction === bias);
-    const obs = this.findOrderBlocks(candles, bias);
-    const srs = this.findSrZones(candles).filter((z) => z.direction === bias);
+    const isNearPrice = (zone: Zone) => {
+      const width = Math.abs(zone.top - zone.bottom);
+      const tolerance = Math.max(atr * 1.25, width / 2 + atr * 0.25);
+      return width >= atr * 0.15 && Math.abs(zone.mid - mid) <= tolerance;
+    };
+
+    // Only count zones that are relevant to the current market price.
+    const fvgs = this.findFvgZones(candles).filter(
+      (zone) => zone.direction === bias && isNearPrice(zone),
+    );
+    const obs = this.findOrderBlocks(candles, bias).filter(isNearPrice);
+    const srs = this.findSrZones(candles).filter(
+      (zone) => zone.direction === bias && isNearPrice(zone),
+    );
+
+    const rawFib = this.fibLevels(candles, bias);
+    const fib =
+      rawFib && Math.abs(mid - rawFib.entry) <= atr * 1.25 ? rawFib : null;
+
     const sweep = this.detectLiquiditySweep(candles, bias);
-    const br = this.detectBreakRetest(candles, bias);
-    const fib = this.fibLevels(candles, bias);
+    const breakRetest = this.detectBreakRetest(candles, bias);
     const bos = this.detectBosChoch(candles);
 
-    if (bos?.direction === bias) tags.push(bos.kind.toUpperCase());
+    const tags: string[] = [];
+    if (bos?.direction === bias) {
+      tags.push(bos.kind === "choch" ? "CHoCH" : "BOS");
+    }
     if (fvgs.length) tags.push("FVG");
-    if (obs.length) tags.push("OB");
-    if (srs.length) tags.push("S/R");
-    if (sweep) tags.push("LiqSweep");
-    if (br) tags.push("BreakRetest");
-    if (fib) tags.push("Fib");
+    if (obs.length) tags.push("Order Block");
+    if (srs.length) tags.push("Support / Resistance");
+    if (sweep) tags.push("Liquidity Sweep");
+    if (breakRetest) tags.push("Break & Retest");
+    if (fib) tags.push("Fibonacci 61.8%");
 
+    // Do not create an entry from a single weak signal.
     if (tags.length < 2) return null;
 
-    const candidates: Zone[] = [...obs, ...fvgs, ...srs];
-    let zone: Zone | null = null;
-    let bestDist = Infinity;
-    for (const z of candidates) {
-      const width = Math.abs(z.top - z.bottom);
-      if (width < atr * 0.15) continue;
-      const dist = Math.abs(z.mid - mid);
-      if (dist < bestDist) {
-        bestDist = dist;
-        zone = z;
-      }
-    }
+    const candidates: Zone[] = [...obs, ...fvgs, ...srs].sort(
+      (a, b) => Math.abs(a.mid - mid) - Math.abs(b.mid - mid),
+    );
+    const zone = candidates[0] ?? null;
 
-    const minRisk = this.minRiskDistance(candles, mid);
+    if (!zone && !fib) return null;
+
+    const minRisk = this.minRiskDistance(candles, mid, precision);
     let entry = mid;
     let stopLoss: number;
 
     if (zone) {
       if (bias === "bullish") {
         entry = +((zone.bottom + zone.mid) / 2).toFixed(precision);
-        stopLoss = +(zone.bottom - Math.max(atr * 0.4, minRisk * 0.35)).toFixed(
-          precision,
-        );
+        stopLoss = +(
+          zone.bottom - Math.max(atr * 0.4, minRisk * 0.35)
+        ).toFixed(precision);
       } else {
         entry = +((zone.top + zone.mid) / 2).toFixed(precision);
-        stopLoss = +(zone.top + Math.max(atr * 0.4, minRisk * 0.35)).toFixed(
-          precision,
-        );
+        stopLoss = +(
+          zone.top + Math.max(atr * 0.4, minRisk * 0.35)
+        ).toFixed(precision);
       }
     } else if (fib) {
       entry = +fib.entry.toFixed(precision);
@@ -734,88 +833,59 @@ export class TechnicalSignalProvider implements SignalProvider {
     }
 
     let risk = Math.abs(entry - stopLoss);
+    if (!Number.isFinite(risk) || risk <= 0) return null;
+
     if (risk < minRisk) {
-      if (bias === "bullish") {
-        stopLoss = +(entry - minRisk).toFixed(precision);
-      } else {
-        stopLoss = +(entry + minRisk).toFixed(precision);
-      }
+      stopLoss = +(
+        bias === "bullish" ? entry - minRisk : entry + minRisk
+      ).toFixed(precision);
       risk = Math.abs(entry - stopLoss);
     }
 
     if (risk > mid * 0.025) return null;
 
-    let takeProfit: number;
-    let rr: number;
-
-    const structureTp = this.nextStructureTarget(candles, bias, entry);
-    if (structureTp !== null) {
-      const dist = Math.abs(structureTp - entry);
-      rr = dist / risk;
-      if (rr >= 1.8) {
-        takeProfit = +structureTp.toFixed(precision);
-        rr = Math.round(rr * 10) / 10;
-      } else {
-        rr = 2.2;
-        takeProfit =
-          bias === "bullish"
-            ? +(entry + risk * rr).toFixed(precision)
-            : +(entry - risk * rr).toFixed(precision);
-      }
-    } else if (fib) {
-      const dist = Math.abs(fib.ext - entry);
-      rr = Math.max(2, Math.min(4.5, dist / risk));
-      rr = Math.round(rr * 10) / 10;
-      takeProfit =
-        bias === "bullish"
-          ? +(entry + risk * rr).toFixed(precision)
-          : +(entry - risk * rr).toFixed(precision);
-    } else {
-      rr = tags.includes("LiqSweep") || tags.includes("BOS") ? 2.8 : 2.2;
-      takeProfit =
-        bias === "bullish"
-          ? +(entry + risk * rr).toFixed(precision)
-          : +(entry - risk * rr).toFixed(precision);
-    }
-
-    if (bias === "bullish" && (stopLoss >= entry || takeProfit <= entry)) {
-      return null;
-    }
-    if (bias === "bearish" && (stopLoss <= entry || takeProfit >= entry)) {
-      return null;
-    }
-
     if (Math.abs(mid - entry) > risk * 1.15) {
-      if (
-        zone &&
+      const priceInsideZone =
+        zone !== null &&
         mid <= zone.top + atr * 0.1 &&
-        mid >= zone.bottom - atr * 0.1
-      ) {
-        entry = +mid.toFixed(precision);
+        mid >= zone.bottom - atr * 0.1;
+
+      if (!priceInsideZone) return null;
+
+      entry = +mid.toFixed(precision);
+      risk = Math.abs(entry - stopLoss);
+
+      if (risk < minRisk) {
+        stopLoss = +(
+          bias === "bullish" ? entry - minRisk : entry + minRisk
+        ).toFixed(precision);
         risk = Math.abs(entry - stopLoss);
-        if (risk < minRisk) return null;
-        takeProfit =
-          bias === "bullish"
-            ? +(entry + risk * rr).toFixed(precision)
-            : +(entry - risk * rr).toFixed(precision);
-      } else {
-        return null;
       }
     }
 
-    const finalRr =
-      Math.round(
-        (Math.abs(takeProfit - entry) / Math.abs(entry - stopLoss)) * 10,
-      ) / 10;
-    if (finalRr < 1.8) return null;
+    if (
+      !Number.isFinite(risk) ||
+      risk < minRisk ||
+      risk > mid * 0.025 ||
+      (bias === "bullish" && stopLoss >= entry) ||
+      (bias === "bearish" && stopLoss <= entry)
+    ) {
+      return null;
+    }
+
+    const targetLadder = this.buildTargetLadder(
+      candles,
+      bias,
+      entry,
+      stopLoss,
+      precision,
+    );
+    if (!targetLadder || targetLadder.riskReward3 < 5) return null;
 
     return {
       entry,
       stopLoss,
-      takeProfit1: takeProfit,
-      takeProfit2: takeProfit,
-      takeProfit3: takeProfit,
-      riskReward: finalRr,
+      ...targetLadder,
       timeframe,
       tags,
     };
