@@ -15,12 +15,7 @@ import { getEconomicCalendar } from "@/lib/fundamentals-api";
 import { getSignals } from "@/lib/market-data-api";
 import { useMarketFavorites } from "./market-watch";
 
-export type AlertKind =
-  | "setup"
-  | "trigger"
-  | "sl"
-  | "tp"
-  | "news";
+export type AlertKind = "setup" | "trigger" | "sl" | "tp" | "news";
 
 export type AppNotification = {
   id: string;
@@ -75,7 +70,10 @@ function loadSeen(): Set<string> {
 
 function saveSeen(seen: Set<string>) {
   try {
-    localStorage.setItem(SEEN_KEY, JSON.stringify([...seen].slice(-200));
+    localStorage.setItem(
+      SEEN_KEY,
+      JSON.stringify([...seen].slice(-200)),
+    );
   } catch {
     /* ignore */
   }
@@ -141,85 +139,83 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
         const signals = await getSignals({ favorites: pairs });
         if (!cancelled && Array.isArray(signals)) {
           for (const s of signals as TradingSignal[]) {
-            if (s.type === "setup") {
-              const id = `setup:${s.id}`;
-              if (!seen.has(id)) {
-                seen.add(id);
-                const dir =
-                  s.direction === "bullish"
-                    ? "BUY"
-                    : s.direction === "bearish"
-                      ? "SELL"
-                      : "BIAS";
+            if (s.type !== "setup") continue;
+
+            const setupId = `setup:${s.id}`;
+            if (!seen.has(setupId)) {
+              seen.add(setupId);
+              const dir =
+                s.direction === "bullish"
+                  ? "BUY"
+                  : s.direction === "bearish"
+                    ? "SELL"
+                    : "BIAS";
+              fresh.push({
+                id: setupId,
+                kind: "setup",
+                title: `Setup · ${s.instrument}`,
+                body: `${dir} ${s.timeframe}${s.entry != null ? ` · entry ${s.entry}` : ""}`,
+                href: "/signals",
+                createdAt: Date.now(),
+                read: false,
+              });
+            }
+
+            if (s.entry != null) {
+              const tid = `trigger:${s.id}`;
+              if (!seen.has(tid)) {
+                seen.add(tid);
                 fresh.push({
-                  id,
-                  kind: "setup",
-                  title: `Setup · ${s.instrument}`,
-                  body: `${dir} ${s.timeframe}${s.entry != null ? ` · entry ${s.entry}` : ""}`,
+                  id: tid,
+                  kind: "trigger",
+                  title: `Price trigger · ${s.instrument}`,
+                  body: `Watch entry near ${s.entry}`,
+                  href: `/charts?symbol=${encodeURIComponent(s.instrument)}`,
+                  createdAt: Date.now(),
+                  read: false,
+                });
+              }
+            }
+
+            const closed =
+              typeof s.summary === "string" &&
+              s.summary.toLowerCase().includes("market closed");
+
+            if (!closed && s.stopLoss != null && s.confidence >= 65) {
+              const sid = `sl-watch:${s.id}`;
+              if (!seen.has(sid)) {
+                seen.add(sid);
+                fresh.push({
+                  id: sid,
+                  kind: "sl",
+                  title: `SL level · ${s.instrument}`,
+                  body: `Stop set at ${s.stopLoss}`,
                   href: "/signals",
                   createdAt: Date.now(),
                   read: false,
                 });
               }
+            }
 
-              // Entry / SL / TP level notices (once per signal id)
-              if (s.entry != null) {
-                const tid = `trigger:${s.id}`;
-                if (!seen.has(tid) && s.summary?.toLowerCase().includes("entry")) {
-                  seen.add(tid);
-                  fresh.push({
-                    id: tid,
-                    kind: "trigger",
-                    title: `Price trigger · ${s.instrument}`,
-                    body: `Watch entry near ${s.entry}`,
-                    href: `/charts?symbol=${encodeURIComponent(s.instrument)}`,
-                    createdAt: Date.now(),
-                    read: false,
-                  });
-                }
-              }
-              if (
-                typeof s.summary === "string" &&
-                s.summary.toLowerCase().includes("market closed")
-              ) {
-                // skip SL/TP noise when session closed
-              } else {
-                if (s.stopLoss != null) {
-                  const sid = `sl-watch:${s.id}`;
-                  if (!seen.has(sid) && s.confidence >= 70) {
-                    seen.add(sid);
-                    fresh.push({
-                      id: sid,
-                      kind: "sl",
-                      title: `SL level · ${s.instrument}`,
-                      body: `Stop set at ${s.stopLoss}`,
-                      href: "/signals",
-                      createdAt: Date.now(),
-                      read: false,
-                    });
-                  }
-                }
-                if (s.takeProfit != null) {
-                  const pid = `tp-watch:${s.id}`;
-                  if (!seen.has(pid) && s.confidence >= 70) {
-                    seen.add(pid);
-                    fresh.push({
-                      id: pid,
-                      kind: "tp",
-                      title: `TP level · ${s.instrument}`,
-                      body: `Target at ${s.takeProfit}`,
-                      href: "/signals",
-                      createdAt: Date.now(),
-                      read: false,
-                    });
-                  }
-                }
+            if (!closed && s.takeProfit != null && s.confidence >= 65) {
+              const pid = `tp-watch:${s.id}`;
+              if (!seen.has(pid)) {
+                seen.add(pid);
+                fresh.push({
+                  id: pid,
+                  kind: "tp",
+                  title: `TP level · ${s.instrument}`,
+                  body: `Target at ${s.takeProfit}`,
+                  href: "/signals",
+                  createdAt: Date.now(),
+                  read: false,
+                });
               }
             }
           }
         }
       } catch {
-        /* API may be offline */
+        /* API offline */
       }
 
       try {
@@ -230,7 +226,6 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
             if (ev.impact !== "high") continue;
             const t = new Date(ev.time).getTime();
             if (Number.isNaN(t)) continue;
-            // next 24h high impact
             if (t < now - 60_000 || t > now + 24 * 60 * 60 * 1000) continue;
             const id = `news:${ev.id}`;
             if (seen.has(id)) continue;

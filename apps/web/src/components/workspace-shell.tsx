@@ -7,6 +7,10 @@ import { getMarketStatus } from "@/lib/market-data-api";
 import type { MarketDataStatus } from "@veytrix/shared";
 import { ThemeToggle } from "./theme-toggle";
 import { useHydrated } from "./theme-provider";
+import {
+  NotificationBell,
+  NotificationsProvider,
+} from "./notifications";
 
 const desktopNav = [
   { href: "/", label: "Home", icon: "home" },
@@ -109,7 +113,7 @@ function connectionLabel(state: StatusState): string {
   return "Not set";
 }
 
-export function WorkspaceShell({ children }: { children: React.ReactNode }) {
+function ShellInner({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const connection = useMarketConnection();
   const hydrated = useHydrated();
@@ -173,6 +177,7 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }) {
               <span className={`state-dot${isConnected ? " connected" : ""}`} />
               {connectionLabel(visibleConnection)}
             </span>
+            <NotificationBell />
             <ThemeToggle />
           </div>
         </header>
@@ -198,6 +203,14 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }) {
         </nav>
       </div>
     </div>
+  );
+}
+
+export function WorkspaceShell({ children }: { children: React.ReactNode }) {
+  return (
+    <NotificationsProvider>
+      <ShellInner>{children}</ShellInner>
+    </NotificationsProvider>
   );
 }
 
