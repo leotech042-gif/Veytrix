@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useState } from "react";
 import type { SignalProviderStatus, TradingSignal } from "@veytrix/shared";
 import { getSignalStatus, getSignals } from "@/lib/market-data-api";
@@ -70,6 +69,7 @@ export function SignalsPage() {
   const [filter, setFilter] = useState<"all" | "setup" | "bias">("all");
   const [query, setQuery] = useState("");
   const [refreshing, setRefreshing] = useState(false);
+  const [expandedBias, setExpandedBias] = useState<string[]>([]);
 
   async function load() {
     setRefreshing(true);
@@ -123,8 +123,8 @@ export function SignalsPage() {
 
   const setups = signals.filter((s) => s.type === "setup");
   const biases = signals.filter((s) => s.type === "bias");
-  const shown =
-    filter === "setup" ? setups : filter === "bias" ? biases : signals;
+  const shownSetups = filter === "bias" ? [] : setups;
+  const shownBiases = filter === "setup" ? [] : biases;
 
   return (
     <div className="sig-screen">
@@ -158,13 +158,13 @@ export function SignalsPage() {
 
       {loading && <div className="home-empty">Loading…</div>}
 
-      {!loading && shown.length === 0 && (
+      {!loading && shownSetups.length === 0 && shownBiases.length === 0 && (
         <div className="home-empty">
           {status?.state === "connected" ? "No setups right now" : "Engine offline"}
         </div>
       )}
 
-      {shown.map((signal) => {
+      {shownSetups.map((signal) => {
         const isBuy = signal.direction === "bullish";
         const isSell = signal.direction === "bearish";
         const dir = isBuy ? "BUY" : isSell ? "SELL" : "BIAS";
@@ -263,27 +263,36 @@ export function SignalsPage() {
         );
       })}
 
-      {!loading && biases.length > 0 && filter === "all" && (
+      {!loading && shownBiases.length > 0 && (
         <div className="sig-bias-block">
           <h3>Bias only</h3>
-          <p className="sig-bias-note">No valid entry yet — wait for confirmation</p>
-          {biases.map((b) => (
-            <Link key={b.id} href={`/charts?symbol=${b.instrument}`} className="sig-bias-row">
-              <span className="sig-bias-dot" />
-              <span>
-                <strong>
-                  {b.instrument} ·{" "}
-                  {b.direction === "bullish"
-                    ? "Bullish bias"
-                    : b.direction === "bearish"
-                      ? "Bearish bias"
-                      : "Neutral bias"}
-                </strong>
-                <span>{b.summary}</span>
-              </span>
-              <span className="chevron">›</span>
-            </Link>
-          ))}
+          <p className="sig-bias-note">Directional context only · no confirmed entry yet</p>
+          {shownBiases.map((b) => {
+            const expanded = expandedBias.includes(b.id);
+            const biasLabel = b.direction === "bullish" ? "Bullish bias" : b.direction === "bearish" ? "Bearish bias" : "Neutral bias";
+            const reasons = b.summary.split(".").map((reason) => reason.trim()).filter(Boolean);
+            return (
+              <div key={b.id} className={`sig-bias-item ${b.direction}`}>
+                <button type="button" className="sig-bias-row" aria-expanded={expanded} aria-controls={`bias-details-${b.id}`}
+                  onClick={() => setExpandedBias((current) => current.includes(b.id) ? current.filter((id) => id !== b.id) : [...current, b.id])}>
+                  <span className="sig-bias-dot" />
+                  <span><strong>{b.instrument} · {biasLabel}</strong><span>{b.summary}</span></span>
+                  <span className={`chevron ${expanded ? "expanded" : ""}`} aria-hidden="true">⌄</span>
+                </button>
+                {expanded && (
+                  <div className="sig-bias-details" id={`bias-details-${b.id}`}>
+                    <section><h4>Technical explanation</h4>
+                      {reasons.length > 0 ? <ul>{reasons.map((reason, index) => <li key={index}>{reason}</li>)}</ul> : <p>No technical explanation was supplied by the signal engine.</p>}
+                      <p className="sig-bias-disclaimer">This is the engine’s current technical reasoning, not a guaranteed forecast.</p>
+                    </section>
+                    <section><h4>Fundamental context</h4>
+                      <p>Fundamental event analysis is not currently attached to bias signals. Check the News page for the economic calendar before treating this bias as a complete technical and fundamental view.</p>
+                    </section>
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
       )}
     </div>
