@@ -106,7 +106,6 @@ function FundamentalsPage() {
         if (cancelled) return;
         setStatus(st);
         if (st.state !== "connected") {
-          setLoading(false);
           return;
         }
         setError(null);
@@ -114,8 +113,6 @@ function FundamentalsPage() {
         if (!cancelled) {
           setError(reason instanceof Error ? reason.message : "Fundamental data could not be loaded.");
         }
-      } finally {
-        if (!cancelled) setLoading(false);
       }
     })();
     return () => {
