@@ -404,7 +404,7 @@ export function MarketWatch({
     if (feed.status?.state !== "connected" || filtered.length === 0) return;
     let active = true;
     const missing = filtered
-      .slice(0, 16)
+      .slice(0, 40)
       .filter((instrument) => !dailyHistory[instrument.symbol.toUpperCase()]);
     if (missing.length === 0) return;
 
