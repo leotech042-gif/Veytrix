@@ -1,10 +1,8 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import type { SignalProviderStatus, TradingSignal } from "@veytrix/shared";
 import { getSignalStatus, getSignals } from "@/lib/market-data-api";
-import { getEconomicCalendar, getFundamentalsStatus } from "@/lib/fundamentals-api";
-import type { EconomicEvent } from "@veytrix/shared";
 import { useMarketFavorites } from "./market-watch";
 
 const DEFAULT_PAIRS = [
@@ -72,10 +70,6 @@ export function SignalsPage() {
   const [query, setQuery] = useState("");
   const [refreshing, setRefreshing] = useState(false);
   const [expandedBias, setExpandedBias] = useState<string[]>([]);
-  const [economicEvents, setEconomicEvents] = useState<EconomicEvent[]>([]);
-  const [fundamentalsMessage, setFundamentalsMessage] = useState("Loading Finnhub calendar…");
-  const previousSignals = useRef<Map<string, TradingSignal>>(new Map());
-  const [signalChanges, setSignalChanges] = useState<Map<string, string[]>>(new Map());
 
   async function load() {
     setRefreshing(true);
@@ -94,22 +88,7 @@ export function SignalsPage() {
         setSignals([]);
         return;
       }
-      const next = sortSignals(raw);
-      const changes = new Map<string, string[]>();
-      for (const current of next) {
-        const previous = previousSignals.current.get(current.instrument);
-        if (!previous) continue;
-        const delta: string[] = [];
-        if (previous.direction !== current.direction) delta.push(`Bias ${previous.direction} → ${current.direction}`);
-        if (previous.confidence !== current.confidence) delta.push(`Confidence ${previous.confidence}% → ${current.confidence}% (${current.confidence - previous.confidence > 0 ? "+" : ""}${current.confidence - previous.confidence})`);
-        if (previous.type !== current.type) delta.push(`Signal changed ${previous.type} → ${current.type}`);
-        const oldTags = new Set(previous.tags ?? []);
-        for (const tag of current.tags ?? []) if (!oldTags.has(tag)) delta.push(`New confirmation: ${tag}`);
-        if (delta.length) changes.set(current.instrument, delta);
-      }
-      previousSignals.current = new Map(next.map((signal) => [signal.instrument, signal]));
-      setSignalChanges(changes);
-      setSignals(next);
+      setSignals(sortSignals(raw));
     } catch {
       setSignals([]);
     } finally {
@@ -120,20 +99,6 @@ export function SignalsPage() {
 
   useEffect(() => {
     void load();
-    void (async () => {
-      try {
-        const status = await getFundamentalsStatus();
-        if (status.state !== "connected") {
-          setFundamentalsMessage(status.message);
-          return;
-        }
-        const events = await getEconomicCalendar();
-        setEconomicEvents(events);
-        setFundamentalsMessage(events.length ? `Finnhub · ${events.length} events loaded` : "Finnhub connected, but returned no calendar events for this date range.");
-      } catch (error) {
-        setFundamentalsMessage(error instanceof Error ? error.message : "Finnhub calendar request failed.");
-      }
-    })();
     // Auto refresh every 60s
     const t = window.setInterval(() => void load(), 60_000);
     return () => window.clearInterval(t);
@@ -308,10 +273,7 @@ export function SignalsPage() {
                 <button type="button" className="sig-bias-row" aria-expanded={expanded} aria-controls={`bias-details-${b.id}`}
                   onClick={() => setExpandedBias((current) => current.includes(b.id) ? current.filter((id) => id !== b.id) : [...current, b.id])}>
                   <span className="sig-bias-dot" />
-                  <span><strong>{b.instrument} · {biasLabel}</strong><span>{b.summary}</span>
-                    <span className="sig-bias-meta">Confluence score: {b.confidence}/100</span>
-                    {signalChanges.get(b.instrument)?.length ? <span className="sig-bias-meta">Changed: {signalChanges.get(b.instrument)?.join(" · ")}</span> : null}
-                  </span>
+                  <span><strong>{b.instrument} · {biasLabel}</strong><span>{b.summary}</span></span>
                   <span className={`chevron ${expanded ? "expanded" : ""}`} aria-hidden="true">⌄</span>
                 </button>
                 {expanded && (
@@ -320,16 +282,8 @@ export function SignalsPage() {
                       {reasons.length > 0 ? <ul>{reasons.map((reason, index) => <li key={index}>{reason}</li>)}</ul> : <p>No technical explanation was supplied by the signal engine.</p>}
                       <p className="sig-bias-disclaimer">This is the engine’s current technical reasoning, not a guaranteed forecast.</p>
                     </section>
-                    <section><h4>Fundamental analysis</h4>
-                      <p className="sig-bias-disclaimer">{fundamentalsMessage}</p>
-                      {(() => {
-                        const currencies = b.instrument.toUpperCase().includes("XAU") ? ["USD"] : [b.instrument.slice(0, 3), b.instrument.slice(3, 6)];
-                        const relevant = economicEvents.filter((event) => currencies.includes(event.currency)).slice(0, 5);
-                        return relevant.length ? <ul>{relevant.map((event) => <li key={event.id}>
-                          <strong>{event.currency} · {event.impact.toUpperCase()} · {event.event}</strong>
-                          {" — "}{new Date(event.time).toLocaleString()}. {" "}{event.analysis}
-                        </li>)}</ul> : <p>No matching currency events were returned by Finnhub for this date window. This is not a neutral fundamental signal.</p>;
-                      })()}
+                    <section><h4>Fundamental context</h4>
+                      <p>Fundamental event analysis is not currently attached to bias signals. Check the News page for the economic calendar before treating this bias as a complete technical and fundamental view.</p>
                     </section>
                   </div>
                 )}
