@@ -349,7 +349,10 @@ export function MarketWatch({
     });
   }, [category, favorites, favoritesOnly, feed.instruments, search]);
 
-  const visibleInstruments = compact ? filtered.slice(0, 6) : filtered;
+  const visibleInstruments = useMemo(
+    () => (compact ? filtered.slice(0, 6) : filtered),
+    [compact, filtered],
+  );
   const historySymbols = useMemo(
     () => visibleInstruments.slice(0, 12).map((item) => item.symbol),
     [visibleInstruments],
