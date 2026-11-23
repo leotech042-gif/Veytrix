@@ -34,10 +34,12 @@ export class FinnhubFundamentalsProvider implements FundamentalsProvider {
   private readonly logger = new Logger(FinnhubFundamentalsProvider.name);
   private readonly apiKey = process.env.FINNHUB_API_KEY?.trim();
   private readonly baseUrl = "https://finnhub.io/api/v1";
-  private cache: { at: number; events: EconomicEvent[] } | null = null;
+  private readonly cache = new Map<string, { at: number; events: EconomicEvent[] }>();
   private readonly cacheMs = 20 * 60_000;
+  private lastFetchError: string | null = null;
+  private lastSuccessfulFetch: string | null = null;
 
-  getStatus(): FundamentalsStatus {
+  async getStatus(): Promise<FundamentalsStatus> {
     if (!this.apiKey) {
       return {
         state: "unconfigured",
@@ -46,11 +48,15 @@ export class FinnhubFundamentalsProvider implements FundamentalsProvider {
           "FINNHUB_API_KEY is not set. Add it to the API environment to load the economic calendar.",
       };
     }
+    await this.getCalendar();
+    if (this.lastFetchError) {
+      return { state: "disconnected", provider: "Finnhub Economic Calendar", message: this.lastFetchError };
+    }
     return {
       state: "connected",
       provider: "Finnhub Economic Calendar",
-      message: "Live calendar · actual / forecast / previous · pair bias",
-      updatedAt: new Date().toISOString(),
+      message: "Finnhub calendar reachable · actual / forecast / previous",
+      updatedAt: this.lastSuccessfulFetch ?? new Date().toISOString(),
     };
   }
 
@@ -60,31 +66,28 @@ export class FinnhubFundamentalsProvider implements FundamentalsProvider {
   ): Promise<readonly EconomicEvent[]> {
     if (!this.apiKey) return [];
 
-    if (this.cache && Date.now() - this.cache.at < this.cacheMs) {
-      return this.cache.events;
-    }
-
-    const start =
-      from ??
-      new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
-    const end =
-      to ??
-      new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    const start = from ?? new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    const end = to ?? new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    const cacheKey = `${start}:${end}`;
+    const cached = this.cache.get(cacheKey);
+    if (cached && Date.now() - cached.at < this.cacheMs) return cached.events;
 
     try {
       const url = `${this.baseUrl}/calendar/economic?from=${start}&to=${end}&token=${this.apiKey}`;
       const res = await fetch(url);
       if (!res.ok) {
-        this.logger.warn(`Finnhub calendar HTTP ${res.status}`);
-        return this.cache?.events ?? [];
+        this.lastFetchError = `Finnhub calendar request failed (HTTP ${res.status}). Check the API key, Finnhub plan and request limits.`;
+        this.logger.warn(this.lastFetchError);
+        return cached?.events ?? [];
       }
 
-      const body = (await res.json()) as {
-        economicCalendar?: Array<Record<string, unknown>>;
-      };
-      const raw = Array.isArray(body.economicCalendar)
-        ? body.economicCalendar
-        : [];
+      const body = (await res.json()) as { economicCalendar?: Array<Record<string, unknown>> };
+      if (!body || !Array.isArray(body.economicCalendar)) {
+        this.lastFetchError = "Finnhub returned an unexpected economic calendar response.";
+        this.logger.warn(this.lastFetchError);
+        return cached?.events ?? [];
+      }
+      const raw = body.economicCalendar;
 
       const events = raw
         .map((row) => this.mapEvent(row))
@@ -93,14 +96,14 @@ export class FinnhubFundamentalsProvider implements FundamentalsProvider {
           (a, b) => new Date(a.time).getTime() - new Date(b.time).getTime(),
         );
 
-      this.cache = { at: Date.now(), events };
+      this.cache.set(cacheKey, { at: Date.now(), events });
+      this.lastFetchError = null;
+      this.lastSuccessfulFetch = new Date().toISOString();
       return events;
     } catch (err) {
-      this.logger.warn(
-        "Finnhub calendar failed",
-        err instanceof Error ? err.message : err,
-      );
-      return this.cache?.events ?? [];
+      this.lastFetchError = `Finnhub calendar request failed: ${err instanceof Error ? err.message : "unknown network error"}`;
+      this.logger.warn("Finnhub calendar failed", this.lastFetchError);
+      return cached?.events ?? [];
     }
   }
 
