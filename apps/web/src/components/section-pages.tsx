@@ -17,6 +17,7 @@ import {
   type ThemePreference,
 } from "./theme-provider";
 import { SignalsPage } from "./signals-page";
+import { PairLogo } from "./pair-logo";
 
 export function SectionPage({
   section,
@@ -49,10 +50,27 @@ export function SectionPage({
   return <div className="home-empty">Not configured</div>;
 }
 
+function directionLabel(direction: EconomicEvent["currencyBias"]): string {
+  if (direction === "bullish") return "Bullish";
+  if (direction === "bearish") return "Bearish";
+  if (direction === "neutral") return "Neutral";
+  return "Pending";
+}
+
+function directionClass(direction: EconomicEvent["currencyBias"]): string {
+  return direction === "bullish" ? "bullish" : direction === "bearish" ? "bearish" : direction === "neutral" ? "neutral" : "pending";
+}
+
+function fundamentalValue(value: number | null, unit?: string): string {
+  if (value === null || !Number.isFinite(value)) return "Not supplied";
+  return `${value.toLocaleString(undefined, { maximumFractionDigits: 4 })}${unit ? ` ${unit}` : ""}`;
+}
+
 function FundamentalsPage() {
   const [status, setStatus] = useState<FundamentalsStatus | null>(null);
   const [events, setEvents] = useState<EconomicEvent[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [impact, setImpact] = useState<"all" | "high" | "medium" | "low">("all");
 
   useEffect(() => {
@@ -69,8 +87,11 @@ function FundamentalsPage() {
         const cal = await getEconomicCalendar();
         if (cancelled) return;
         setEvents(Array.isArray(cal) ? cal : []);
-      } catch {
-        /* empty */
+        setError(null);
+      } catch (reason) {
+        if (!cancelled) {
+          setError(reason instanceof Error ? reason.message : "Fundamental data could not be loaded.");
+        }
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -81,73 +102,110 @@ function FundamentalsPage() {
   }, []);
 
   const filtered = useMemo(() => {
-    const list = impact === "all" ? events : events.filter((e) => e.impact === impact);
-    return list.slice(0, 40);
+    const list = impact === "all" ? events : events.filter((event) => event.impact === impact);
+    return list.slice(0, 60);
   }, [events, impact]);
 
-  const today = new Date().toDateString();
-
   return (
-    <div className="news-screen">
+    <div className="news-screen fx-fundamentals">
+      <div className="fx-fundamentals-intro">
+        <div>
+          <span className="mw-eyebrow">MACROECONOMIC INTELLIGENCE</span>
+          <h2>Fundamental analysis</h2>
+          <p>Economic releases, currency direction and affected-market bias.</p>
+        </div>
+        {status?.state === "connected" && <span className="fx-data-source">{status.provider}</span>}
+      </div>
+
+      {status?.state === "connected" && (
+        <div className="fx-feed-note" role="status">
+          {status.message}
+          {" "}Pair directions are event-based context, not guaranteed forecasts.
+        </div>
+      )}
+
       <div className="sig-filters">
-        {(["all", "high", "medium", "low"] as const).map((v) => (
+        {(["all", "high", "medium", "low"] as const).map((value) => (
           <button
-            key={v}
+            key={value}
             type="button"
-            className={`sig-filter${impact === v ? " on" : ""}`}
-            onClick={() => setImpact(v)}
+            className={`sig-filter${impact === value ? " on" : ""}`}
+            onClick={() => setImpact(value)}
           >
-            {v === "all" ? "All" : v}
+            {value === "all" ? "All events" : `${value[0].toUpperCase()}${value.slice(1)} impact`}
           </button>
         ))}
       </div>
 
-      {loading && <div className="home-empty">Loading…</div>}
-
+      {loading && <div className="home-empty">Loading macroeconomic data…</div>}
       {!loading && status?.state !== "connected" && (
-        <div className="home-empty">
-          {status?.message ?? "Set FINNHUB_API_KEY on the API to load the calendar"}
+        <div className="home-empty" role="status">
+          {status?.message ?? error ?? "FXMacroData is not connected."}
         </div>
       )}
-
+      {!loading && error && <div className="inline-error" role="alert">{error}</div>}
       {!loading && status?.state === "connected" && filtered.length === 0 && (
-        <div className="home-empty">No events in this window</div>
+        <div className="home-empty">No economic events in this date window.</div>
       )}
 
-      {!loading &&
-        filtered.map((ev) => {
-          const isToday = new Date(ev.time).toDateString() === today;
-          const time = new Date(ev.time).toLocaleTimeString([], {
-            hour: "2-digit",
-            minute: "2-digit",
-          });
-          return (
-            <article key={ev.id} className="news-card">
-              <div className="news-card-top">
-                <span className="news-time">{isToday ? time : "Later"}</span>
-                <div className="news-card-title">
-                  <strong>{ev.event}</strong>
-                  <span>
-                    {ev.currency} · {ev.country}
-                  </span>
-                </div>
-                <span className={`news-impact ${ev.impact}`}>{ev.impact.toUpperCase()}</span>
+      {!loading && filtered.map((event) => {
+        const releaseDate = new Date(event.time);
+        const validDate = Number.isFinite(releaseDate.getTime());
+        const actualChange = event.actual !== null && event.previous !== null
+          ? event.actual - event.previous
+          : null;
+        return (
+          <article key={event.id} className="news-card fx-event-card">
+            <div className="fx-event-header">
+              <div className="fx-event-time">
+                <strong>{validDate ? releaseDate.toLocaleDateString([], { day: "2-digit", month: "short" }) : "Date pending"}</strong>
+                <span>{validDate ? releaseDate.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "Time pending"}</span>
               </div>
-              {ev.affectedPairs?.length > 0 && (
-                <div className="news-pairs">
-                  <span className="lbl">AFFECTED</span>
-                  <span>
-                    {ev.affectedPairs
-                      .slice(0, 4)
-                      .map((p) => p.symbol)
-                      .join(" · ")}
-                  </span>
+              <div className="news-card-title">
+                <strong>{event.event}</strong>
+                <span>{event.currency} · {event.country}</span>
+              </div>
+              <span className={`news-impact ${event.impact}`}>{event.impact.toUpperCase()}</span>
+            </div>
+
+            <div className="fx-event-direction">
+              <span>Currency bias</span>
+              <strong className={`fx-bias-pill ${directionClass(event.currencyBias)}`}>
+                {directionLabel(event.currencyBias)} {event.currency}
+              </strong>
+            </div>
+
+            <div className="fx-event-values">
+              <div><span>Actual</span><strong>{fundamentalValue(event.actual, event.unit)}</strong></div>
+              <div><span>Previous</span><strong>{fundamentalValue(event.previous, event.unit)}</strong></div>
+              <div><span>Forecast</span><strong>{fundamentalValue(event.estimate, event.unit)}</strong></div>
+              <div><span>Change vs previous</span><strong>{actualChange === null ? "Not available" : `${actualChange > 0 ? "+" : ""}${actualChange.toLocaleString(undefined, { maximumFractionDigits: 4 })}`}</strong></div>
+            </div>
+
+            {event.affectedPairs.length > 0 && (
+              <div className="fx-affected-pairs">
+                <div className="fx-subheading">
+                  <strong>Affected pairs</strong>
+                  <span>{event.affectedPairs.length} instruments</span>
                 </div>
-              )}
-              {ev.analysis && <p className="news-note">{ev.analysis}</p>}
-            </article>
-          );
-        })}
+                <div className="fx-pair-grid">
+                  {event.affectedPairs.map((pair) => (
+                    <div className="fx-pair-row" key={`${event.id}-${pair.symbol}`}>
+                      <PairLogo symbol={pair.symbol} size="sm" />
+                      <strong>{pair.symbol}</strong>
+                      <span className={`fx-bias-pill ${directionClass(pair.bias)}`}>
+                        {directionLabel(pair.bias)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {event.analysis && <p className="news-note fx-event-analysis">{event.analysis}</p>}
+          </article>
+        );
+      })}
     </div>
   );
 }
