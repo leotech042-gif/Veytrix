@@ -354,7 +354,7 @@ export function MarketWatch({
 }) {
   const { favorites, toggle } = useMarketFavorites();
   const [search, setSearch] = useState("");
-  const [tab, setTab] = useState<WatchTab>(favoritesOnly ? "watchlist" : "watchlist");
+  const [tab, setTab] = useState<WatchTab>("watchlist");
   const [selectedSymbol, setSelectedSymbol] = useState("");
   const [dailyHistory, setDailyHistory] = useState<Record<string, Pick<MarketCandle, "time" | "close">[]>>({});
 
@@ -398,7 +398,7 @@ export function MarketWatch({
         instrument.displayName.toLowerCase().includes(query);
       return matchesTab && matchesSearch;
     });
-  }, [favorites, feed.instruments, search, tab]);
+  }, [favorites, favoritesOnly, feed.instruments, search, tab]);
 
   useEffect(() => {
     if (feed.status?.state !== "connected" || filtered.length === 0) return;
