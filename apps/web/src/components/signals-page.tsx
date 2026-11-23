@@ -52,6 +52,16 @@ function sortSignals(list: TradingSignal[]): TradingSignal[] {
   });
 }
 
+function formatPrice(value?: number): string {
+  if (typeof value !== "number" || !Number.isFinite(value)) return "—";
+  return value.toLocaleString("en-US", { maximumFractionDigits: 8 });
+}
+
+function formatReward(value?: number): string {
+  if (typeof value !== "number" || !Number.isFinite(value)) return "—";
+  return `1:${value.toFixed(1)}`;
+}
+
 export function SignalsPage() {
   const { favorites: marketFavorites } = useMarketFavorites();
   const [status, setStatus] = useState<SignalProviderStatus | null>(null);
@@ -186,33 +196,68 @@ export function SignalsPage() {
 
             {signal.summary && <p className="vx-sig-summary">{signal.summary}</p>}
 
+            {signal.type === "setup" && signal.tags && signal.tags.length > 0 && (
+              <div className="sig-filters vx-sig-tags" aria-label="Strategy confirmations">
+                {signal.tags.map((tag) => (
+                  <span className="vx-sig-status" key={tag}>
+                    {tag}
+                  </span>
+                ))}
+              </div>
+            )}
+
             <div className="vx-sig-grid">
               <div>
                 <span>Confidence</span>
                 <strong>{signal.confidence}%</strong>
               </div>
-              <div>
-                <span>Type</span>
-                <strong>{signal.type}</strong>
-              </div>
-              <div>
-                <span>Entry</span>
-                <strong>{signal.entry != null ? signal.entry : "—"}</strong>
-              </div>
-              <div>
-                <span>SL</span>
-                <strong>{signal.stopLoss != null ? signal.stopLoss : "—"}</strong>
-              </div>
-              <div>
-                <span>TP</span>
-                <strong>{signal.takeProfit != null ? signal.takeProfit : "—"}</strong>
-              </div>
-              <div>
-                <span>R:R</span>
-                <strong>
-                  {signal.riskReward != null ? `1:${signal.riskReward}` : "—"}
-                </strong>
-              </div>
+              {signal.type === "setup" ? (
+                <>
+                  <div>
+                    <span>Entry</span>
+                    <strong>{formatPrice(signal.entry)}</strong>
+                  </div>
+                  <div>
+                    <span>Stop Loss</span>
+                    <strong>{formatPrice(signal.stopLoss)}</strong>
+                  </div>
+                  <div>
+                    <span>Take Profit 1</span>
+                    <strong>{formatPrice(signal.takeProfit1 ?? signal.takeProfit)}</strong>
+                  </div>
+                  <div>
+                    <span>Take Profit 2</span>
+                    <strong>{formatPrice(signal.takeProfit2)}</strong>
+                  </div>
+                  <div>
+                    <span>Take Profit 3</span>
+                    <strong>{formatPrice(signal.takeProfit3)}</strong>
+                  </div>
+                  <div>
+                    <span>R:R at TP1</span>
+                    <strong>{formatReward(signal.riskReward1)}</strong>
+                  </div>
+                  <div>
+                    <span>R:R at TP2</span>
+                    <strong>{formatReward(signal.riskReward2)}</strong>
+                  </div>
+                  <div>
+                    <span>R:R at TP3</span>
+                    <strong>{formatReward(signal.riskReward3 ?? signal.riskReward)}</strong>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div>
+                    <span>Signal</span>
+                    <strong>Directional bias only</strong>
+                  </div>
+                  <div>
+                    <span>Direction</span>
+                    <strong>{dir}</strong>
+                  </div>
+                </>
+              )}
             </div>
           </article>
         );
