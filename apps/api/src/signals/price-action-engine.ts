@@ -1092,6 +1092,9 @@ export function analysePriceAction(
         ]
       : []),
     ...(shiftIndex !== null ? ["DISPLACEMENT", "MSS", "STRUCTURE_SHIFT"] : []),
+    ...(sweep?.source === "ASIAN_RANGE" && shiftIndex !== null
+      ? ["PO3_AMD_ASIAN_SWEEP_DISTRIBUTION"]
+      : []),
     ...(zone.kind === "FVG" ? ["FVG", "AOL_RETEST"] : []),
     ...(zone.kind === "ORDER_BLOCK" ? ["ORDER_BLOCK", "MITIGATION_CHECK"] : []),
     ...(zone.kind === "BREAKER_BLOCK" ? ["BREAKER_BLOCK", "MITIGATION_CHECK"] : []),
