@@ -316,10 +316,15 @@ function WatchPairMark({ instrument }: { instrument: MarketInstrument }) {
   const symbol = instrument.symbol.toUpperCase();
   const base = symbol.slice(0, 3);
   const quote = symbol.length >= 6 ? symbol.slice(3, 6) : "";
+  const isIndex = instrument.category === "indices";
   return (
     <span className="watch-pair-mark" aria-hidden="true">
-      <WatchAssetMark part={base} symbol={symbol} />
-      {quote ? <WatchAssetMark part={quote} symbol={symbol} /> : null}
+      <WatchAssetMark part={isIndex ? "USD" : base} symbol={symbol} />
+      {isIndex ? (
+        <span className="watch-asset watch-asset--generic">{symbol}</span>
+      ) : quote ? (
+        <WatchAssetMark part={quote} symbol={symbol} />
+      ) : null}
     </span>
   );
 }
@@ -378,11 +383,15 @@ export function MarketWatch({
     const query = search.trim().toLowerCase();
     return feed.instruments.filter((instrument) => {
       const isFavorite = favorites.includes(instrument.symbol);
-      const matchesTab =
-        (favoritesOnly ? isFavorite : tab === "watchlist" ? isFavorite : tab === "all") ||
-        (tab === "metals" && instrument.category === "metals") ||
-        (tab === "forex" && instrument.category === "forex") ||
-        false;
+      const matchesTab = favoritesOnly
+        ? isFavorite
+        : tab === "watchlist"
+          ? isFavorite || query.length > 0
+          : tab === "all"
+            ? true
+            : tab === "metals"
+              ? instrument.category === "metals"
+              : instrument.category === "forex";
       const matchesSearch =
         !query ||
         instrument.symbol.toLowerCase().includes(query) ||
