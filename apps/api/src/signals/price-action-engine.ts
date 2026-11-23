@@ -464,6 +464,7 @@ interface FlipLevel {
   level: number;
   bandTop: number;
   bandBottom: number;
+  breakoutTime: string;
 }
 
 function findFlipLevel(
@@ -530,7 +531,12 @@ function findFlipLevel(
       continue;
     }
 
-    return { level: candidate.level, bandTop, bandBottom };
+    return {
+      level: candidate.level,
+      bandTop,
+      bandBottom,
+      breakoutTime: candles[breakoutIndex].time,
+    };
   }
   return null;
 }
@@ -557,8 +563,11 @@ function hasFlipType2(
   const atr = averageRange(h4.slice(-14));
   const flip = findFlipLevel(h4, direction, atr, false, 0);
   if (!flip || d1.length < 2) return false;
-  return d1.some((candle) =>
-    hasWickOverlap(candle, flip.bandBottom, flip.bandTop),
+  const breakoutTime = Date.parse(flip.breakoutTime);
+  return d1.some(
+    (candle) =>
+      Date.parse(candle.time) > breakoutTime &&
+      hasWickOverlap(candle, flip.bandBottom, flip.bandTop),
   );
 }
 
@@ -1022,7 +1031,9 @@ export function analysePriceAction(
       ? ", then returned to a fresh imbalance."
       : zone.kind === "ORDER_BLOCK"
         ? ", then returned to an unconsumed origin zone."
-        : ", followed by a confirmed rejection.");
+        : zone.kind === "BREAKER_BLOCK"
+          ? ", then retested a failed block from the other side."
+          : ", followed by a confirmed rejection.");
 
   return {
     direction,
