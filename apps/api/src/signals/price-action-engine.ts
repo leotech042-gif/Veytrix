@@ -159,6 +159,19 @@ function averageRange(candles: MarketCandle[]): number {
   );
 }
 
+function averageTrueRange(candles: MarketCandle[]): number {
+  if (candles.length < 2) return averageRange(candles);
+  const trueRanges = candles.slice(1).map((candle, index) => {
+    const previousClose = candles[index].close;
+    return Math.max(
+      candle.high - candle.low,
+      Math.abs(candle.high - previousClose),
+      Math.abs(candle.low - previousClose),
+    );
+  });
+  return trueRanges.reduce((total, range) => total + range, 0) / trueRanges.length;
+}
+
 function averageBody(candles: MarketCandle[]): number {
   if (candles.length === 0) return 0;
   return (
@@ -427,7 +440,7 @@ function findFreshZones(
 
       const top = candle.high;
       const bottom = candle.low;
-      const fill = mitigationFill(candles, index, top, bottom, direction);
+      const fill = mitigationFill(candles, impulseIndex, top, bottom, direction);
       const touched =
         price >= bottom - tolerance &&
         price <= top + tolerance &&
@@ -445,7 +458,7 @@ function findFreshZones(
           bottom,
           mid: (top + bottom) / 2,
           kind: brokenThrough ? "BREAKER_BLOCK" : "ORDER_BLOCK",
-          createdIndex: index,
+          createdIndex: impulseIndex,
           fill,
         });
       }
@@ -842,7 +855,7 @@ export function analysePriceAction(
   }
 
   const direction = bias.direction;
-  const atr = averageRange(m15.slice(-14));
+  const atr = averageTrueRange(m15.slice(-14));
   if (atr <= 0) {
     return {
       direction,
@@ -973,8 +986,8 @@ export function analysePriceAction(
   const takeProfit1 = round(input.price + sign * risk * 2);
   const takeProfit2 = round(input.price + sign * risk * 3.5);
   const takeProfit = round(target);
-  const h4Atr = averageRange(h4.slice(-14));
-  const h1Atr = averageRange(h1.slice(-14));
+  const h4Atr = averageTrueRange(h4.slice(-14));
+  const h1Atr = averageTrueRange(h1.slice(-14));
   const h4Engineering = findSweep(h4, direction, h4Atr);
   const h1Engineering = findSweep(h1, direction, h1Atr);
   const h4ShiftIndex = findRecentStructureShiftIndex(h4, direction);
