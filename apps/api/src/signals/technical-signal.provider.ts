@@ -27,35 +27,6 @@ function isForexMarketOpen(now = new Date()): boolean {
 }
 
 type CachedSignal = { at: number; signal: TradingSignal };
-type StructureBias = SignalDirection;
-
-interface SwingPoint {
-  index: number;
-  price: number;
-  kind: "high" | "low";
-}
-
-interface Zone {
-  top: number;
-  bottom: number;
-  mid: number;
-  kind: "ob" | "fvg" | "sr" | "breaker" | "fib";
-  direction: "bullish" | "bearish";
-}
-
-interface SetupResult {
-  entry: number;
-  stopLoss: number;
-  takeProfit: number;
-  takeProfit1: number;
-  takeProfit2: number;
-  takeProfit3: number;
-  riskReward: number;
-  riskPips: number;
-  rewardPips: number;
-  timeframe: ChartTimeframe;
-  tags: string[];
-}
 
 @Injectable()
 export class TechnicalSignalProvider implements SignalProvider {
