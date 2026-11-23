@@ -309,7 +309,7 @@ function FundamentalsPage() {
         <div className="home-empty">
           {selectedDate < todayKey
             ? `No historical calendar entries are available for ${selectedDateLabel} from the current calendar feed. The date-specific news analysis remains available above.`
-            : `No economic events scheduled for ${selectedDate === todayKey ? "today" : selectedDateLabel}.`}
+            : `The current calendar feed returned no events for ${selectedDate === todayKey ? "today" : selectedDateLabel}. Its coverage is limited to this week and next week.`}
         </div>
       )}
 
