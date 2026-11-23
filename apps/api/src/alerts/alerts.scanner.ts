@@ -18,6 +18,9 @@ type TrackedSetup = {
   tpHit: boolean;
 };
 
+/** Scan interval — 3 minutes to stay light on Tiingo / Finnhub quotas */
+const SCAN_INTERVAL_MS = 3 * 60_000;
+
 @Injectable()
 export class AlertsScanner implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(AlertsScanner.name);
@@ -42,7 +45,7 @@ export class AlertsScanner implements OnModuleInit, OnModuleDestroy {
 
   onModuleInit() {
     void this.tick();
-    this.timer = setInterval(() => void this.tick(), 20_000);
+    this.timer = setInterval(() => void this.tick(), SCAN_INTERVAL_MS);
   }
 
   onModuleDestroy() {
@@ -53,7 +56,6 @@ export class AlertsScanner implements OnModuleInit, OnModuleDestroy {
   private emit(alert: AlertEvent) {
     if (this.emitted.has(alert.id)) return;
     this.emitted.add(alert.id);
-    // keep set bounded
     if (this.emitted.size > 500) {
       const first = this.emitted.values().next().value;
       if (first) this.emitted.delete(first);
@@ -135,7 +137,6 @@ export class AlertsScanner implements OnModuleInit, OnModuleDestroy {
       const price = q.last ?? q.bid ?? q.ask;
       if (price == null || Number.isNaN(price)) continue;
 
-      // Entry trigger
       if (setup.entry != null && !setup.entryHit) {
         const tol = Math.abs(setup.entry) * 0.00015 || 0.0001;
         if (Math.abs(price - setup.entry) <= tol) {
@@ -152,7 +153,6 @@ export class AlertsScanner implements OnModuleInit, OnModuleDestroy {
         }
       }
 
-      // SL taken
       if (setup.stopLoss != null && !setup.slHit && setup.entryHit) {
         const hit =
           setup.direction === "bullish"
@@ -174,7 +174,6 @@ export class AlertsScanner implements OnModuleInit, OnModuleDestroy {
         }
       }
 
-      // TP taken
       if (setup.takeProfit != null && !setup.tpHit && setup.entryHit) {
         const hit =
           setup.direction === "bullish"
@@ -205,7 +204,6 @@ export class AlertsScanner implements OnModuleInit, OnModuleDestroy {
       if (ev.impact !== "high") continue;
       const t = new Date(ev.time).getTime();
       if (Number.isNaN(t)) continue;
-      // Within next 2 hours or just released (past 15 min)
       if (t < now - 15 * 60_000 || t > now + 2 * 60 * 60_000) continue;
 
       const when = new Date(ev.time).toLocaleString(undefined, {
