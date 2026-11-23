@@ -29,7 +29,7 @@ interface EntryZone {
   top: number;
   bottom: number;
   mid: number;
-  kind: "FVG" | "ORDER_BLOCK" | "BREAKER_BLOCK" | "RETEST";
+  kind: "FVG" | "INVERSE_FVG" | "ORDER_BLOCK" | "BREAKER_BLOCK" | "RETEST";
   createdIndex: number;
   fill: number;
 }
@@ -378,6 +378,173 @@ function mitigationFill(
   return Math.max(0, Math.min(1, penetration / width));
 }
 
+function findInverseFvg(
+  candles: MarketCandle[],
+  direction: Direction,
+  price: number,
+  atr: number,
+): EntryZone | null {
+  if (candles.length < 12 || atr <= 0) return null;
+  const tolerance = atr * 0.1;
+  const lastIndex = candles.length - 1;
+  const last = candles[lastIndex];
+  const candidates: EntryZone[] = [];
+
+  for (let index = Math.max(2, candles.length - 40); index < lastIndex - 1; index += 1) {
+    const first = candles[index - 2];
+    const third = candles[index];
+    const originalGap =
+      direction === "bullish"
+        ? first.low > third.high
+        : first.high < third.low;
+    if (!originalGap) continue;
+
+    const top = direction === "bullish" ? first.low : third.low;
+    const bottom = direction === "bullish" ? third.high : first.high;
+    let breakIndex = -1;
+
+    for (let cursor = index + 1; cursor < lastIndex; cursor += 1) {
+      const candle = candles[cursor];
+      const crossed =
+        direction === "bullish"
+          ? candle.close > top
+          : candle.close < bottom;
+      if (
+        crossed &&
+        isDisplacement(
+          candle,
+          candles.slice(0, cursor),
+          direction,
+        )
+      ) {
+        breakIndex = cursor;
+        break;
+      }
+    }
+    if (breakIndex < 0) continue;
+
+    const afterBreak = candles.slice(breakIndex + 1);
+    const invalidated = afterBreak.some((candle) =>
+      direction === "bullish"
+        ? candle.close < bottom
+        : candle.close > top,
+    );
+    if (invalidated) continue;
+
+    const fill = mitigationFill(
+      candles,
+      breakIndex,
+      top,
+      bottom,
+      direction,
+    );
+    const touched =
+      price >= bottom - tolerance &&
+      price <= top + tolerance &&
+      (direction === "bullish"
+        ? last.low <= top + tolerance
+        : last.high >= bottom - tolerance);
+    if (
+      fill < 0.5 &&
+      touched &&
+      isRejectionCandle(last, direction, candles[lastIndex - 1])
+    ) {
+      candidates.push({
+        top,
+        bottom,
+        mid: (top + bottom) / 2,
+        kind: "INVERSE_FVG",
+        createdIndex: breakIndex,
+        fill,
+      });
+    }
+  }
+
+  return candidates.sort((a, b) => b.createdIndex - a.createdIndex)[0] ?? null;
+}
+
+function hasLiquidityVoid(
+  candles: MarketCandle[],
+  shiftIndex: number,
+  direction: Direction,
+): boolean {
+  const sequence = candles.slice(Math.max(2, shiftIndex - 2), shiftIndex + 1);
+  if (sequence.length < 3) return false;
+  const history = candles.slice(Math.max(0, shiftIndex - 16), shiftIndex);
+  const baselineBody = averageBody(history);
+  const baselineRange = averageRange(history);
+  if (baselineBody <= 0 || baselineRange <= 0) return false;
+
+  return sequence.every((candle, index) => {
+    const previous = sequence[index - 1];
+    const range = candle.high - candle.low;
+    const body = Math.abs(candle.close - candle.open);
+    const directional =
+      direction === "bullish"
+        ? candle.close > candle.open &&
+          (candle.close - candle.low) / Math.max(range, Number.EPSILON) >= 0.7
+        : candle.close < candle.open &&
+          (candle.high - candle.close) / Math.max(range, Number.EPSILON) >= 0.7;
+    if (!directional || body < baselineBody * 1.15 || range < baselineRange) {
+      return false;
+    }
+    if (!previous) return true;
+    const overlap =
+      Math.max(
+        0,
+        Math.min(previous.high, candle.high) -
+          Math.max(previous.low, candle.low),
+      );
+    return overlap / Math.max(
+      Math.min(previous.high - previous.low, candle.high - candle.low),
+      Number.EPSILON,
+    ) <= 0.25;
+  });
+}
+
+function hasInducement(
+  candles: MarketCandle[],
+  sweep: Sweep,
+  direction: Direction,
+  atr: number,
+): boolean {
+  const prior = candles.slice(0, sweep.index);
+  const minorSwings = findSwings(prior, 1).filter((swing) =>
+    direction === "bullish"
+      ? swing.kind === "low" && swing.price > sweep.level + atr * 0.1
+      : swing.kind === "high" && swing.price < sweep.level - atr * 0.1,
+  );
+  const tolerance = atr * 0.04;
+
+  return minorSwings.some((swing) =>
+    prior.slice(swing.index + 2).some((candle) =>
+      direction === "bullish"
+        ? candle.low < swing.price - tolerance && candle.close > swing.price
+        : candle.high > swing.price + tolerance && candle.close < swing.price,
+    ),
+  );
+}
+
+function getNewYorkSession(time: string): string | null {
+  const timestamp = Date.parse(time);
+  if (!Number.isFinite(timestamp)) return null;
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(new Date(timestamp));
+  const hour = Number(parts.find((part) => part.type === "hour")?.value);
+  const minute = Number(parts.find((part) => part.type === "minute")?.value);
+  if (!Number.isFinite(hour) || !Number.isFinite(minute)) return null;
+  const total = hour * 60 + minute;
+
+  if (total >= 20 * 60 || total < 24 * 60) return "ASIA_KILLZONE";
+  if (total >= 2 * 60 && total < 5 * 60) return "LONDON_KILLZONE";
+  if (total >= 7 * 60 && total < 10 * 60) return "NEW_YORK_KILLZONE";
+  return null;
+}
+
 function findFreshZones(
   candles: MarketCandle[],
   direction: Direction,
@@ -428,6 +595,9 @@ function findFreshZones(
 
   // A breaker is a failed opposing block: the opposite displacement forms
   // first, price then closes through the block, and only afterwards retests it.
+  const inverseFvg = findInverseFvg(candles, direction, price, atr);
+  if (inverseFvg) zones.push(inverseFvg);
+
   const breakerStart = Math.max(0, shiftIndex - 24);
   const oppositeDirection: Direction = direction === "bullish" ? "bearish" : "bullish";
   for (let blockIndex = breakerStart; blockIndex < shiftIndex - 2; blockIndex += 1) {
@@ -1096,6 +1266,16 @@ export function analysePriceAction(
       ? ["PO3_AMD_ASIAN_SWEEP_DISTRIBUTION"]
       : []),
     ...(zone.kind === "FVG" ? ["FVG", "AOL_RETEST"] : []),
+    ...(zone.kind === "INVERSE_FVG" ? ["INVERSE_FVG", "FAILED_IMBALANCE_RECLAIM"] : []),
+    ...(shiftIndex !== null && hasLiquidityVoid(m15, shiftIndex, direction)
+      ? ["LIQUIDITY_VOID"]
+      : []),
+    ...(sweep && hasInducement(m15, sweep, direction, atr)
+      ? ["INDUCEMENT_TAKEN_BEFORE_EXTERNAL_SWEEP"]
+      : []),
+    ...(getNewYorkSession(m15[m15.length - 1].time)
+      ? [getNewYorkSession(m15[m15.length - 1].time)!]
+      : []),
     ...(zone.kind === "ORDER_BLOCK" ? ["ORDER_BLOCK", "MITIGATION_CHECK"] : []),
     ...(zone.kind === "BREAKER_BLOCK" ? ["BREAKER_BLOCK", "MITIGATION_CHECK"] : []),
     ...(zone.kind === "RETEST" ? ["PURE_PRICE_ACTION", "BREAK_RETEST"] : []),
@@ -1141,7 +1321,9 @@ export function analysePriceAction(
       : "Price broke structure and held the retest") +
     (zone.kind === "FVG"
       ? ", then returned to a fresh imbalance."
-      : zone.kind === "ORDER_BLOCK"
+      : zone.kind === "INVERSE_FVG"
+        ? ", then reclaimed and retested an inverse imbalance."
+        : zone.kind === "ORDER_BLOCK"
         ? ", then returned to an unconsumed origin zone."
         : zone.kind === "BREAKER_BLOCK"
           ? ", then retested a failed block from the other side."
