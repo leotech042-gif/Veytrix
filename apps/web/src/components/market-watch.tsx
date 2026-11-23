@@ -445,7 +445,6 @@ export function MarketWatch({
     }
     const candles = dailyHistory[instrument.symbol.toUpperCase()];
     if (!candles || candles.length < 2) return null;
-    const lastCandle = candles[candles.length - 1];
     // Compare the current provider quote with the prior completed session close.
     // This remains meaningful through weekends and market holidays.
     const base = candles[candles.length - 2].close;
