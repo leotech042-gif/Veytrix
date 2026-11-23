@@ -379,10 +379,10 @@ export function MarketWatch({
     return feed.instruments.filter((instrument) => {
       const isFavorite = favorites.includes(instrument.symbol);
       const matchesTab =
-        tab === "all" ||
+        (favoritesOnly ? isFavorite : tab === "watchlist" ? isFavorite : tab === "all") ||
         (tab === "metals" && instrument.category === "metals") ||
         (tab === "forex" && instrument.category === "forex") ||
-        (tab === "watchlist" && isFavorite);
+        false;
       const matchesSearch =
         !query ||
         instrument.symbol.toLowerCase().includes(query) ||
