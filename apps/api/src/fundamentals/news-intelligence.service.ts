@@ -88,8 +88,8 @@ export class NewsIntelligenceService {
         query: NEWS_QUERY,
         mode: "ArtList",
         format: "json",
-        startdatetime: this.toGdeltDate(startMs),
-        enddatetime: this.toGdeltDate(endMs - 1),
+        startdatetime: this.toGdeltDate(startMs - 1_000),
+        enddatetime: this.toGdeltDate(endMs),
         maxrecords: "250",
         sort: "DateDesc",
       }).toString();
