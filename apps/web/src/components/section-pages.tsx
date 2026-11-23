@@ -291,7 +291,11 @@ function FundamentalsPage() {
       )}
       {!loading && error && <div className="inline-error" role="alert">{error}</div>}
       {!loading && status?.state === "connected" && filtered.length === 0 && (
-        <div className="home-empty">No economic events for {selectedDate === todayKey ? "today" : selectedDateLabel}.</div>
+        <div className="home-empty">
+          {selectedDate < todayKey
+            ? `No historical calendar entries are available for ${selectedDateLabel} from the current calendar feed. The date-specific news analysis remains available above.`
+            : `No economic events scheduled for ${selectedDate === todayKey ? "today" : selectedDateLabel}.`}
+        </div>
       )}
 
       {!loading && filtered.map((event) => {
