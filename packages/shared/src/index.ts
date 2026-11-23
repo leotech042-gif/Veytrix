@@ -71,6 +71,7 @@ export type FundDirection = "bullish" | "bearish" | "neutral" | "pending";
 export interface AffectedPair {
   symbol: string;
   bias: FundDirection;
+  note?: string;
 }
 
 export interface EconomicEvent {
@@ -105,8 +106,15 @@ export interface TradingSignal {
   createdAt: string;
   entry?: number;
   stopLoss?: number;
+  /** Primary / final target (usually TP3) */
   takeProfit?: number;
+  takeProfit1?: number;
+  takeProfit2?: number;
+  takeProfit3?: number;
+  /** Overall R:R to final target (min ~1:5 for setups) */
   riskReward?: number;
+  riskPips?: number;
+  rewardPips?: number;
   tags?: string[];
   marketOpen?: boolean;
   leanScore?: number;
