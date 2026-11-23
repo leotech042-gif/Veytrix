@@ -445,17 +445,12 @@ export function MarketWatch({
               />
               <kbd>/</kbd>
             </label>
-            <button
-              className={`mw-favorites-toggle${favoritesOnly ? " active" : ""}`}
-              type="button"
-              onClick={() => {
-                if (favoritesOnly) setSearch("");
-              }}
-              aria-pressed={favoritesOnly}
-              title={favoritesOnly ? "Showing favourites" : "Use the favourites page to view only saved instruments"}
-            >
-              <span aria-hidden="true">★</span> {favorites.length} saved
-            </button>
+            <span
+            className={`mw-favorites-toggle${favoritesOnly ? " active" : ""}`}
+            title={favoritesOnly ? "Showing saved instruments" : "Saved instruments"}
+          >
+            <span aria-hidden="true">★</span> {favorites.length} saved
+          </span>
           </div>
 
           {!favoritesOnly && (
