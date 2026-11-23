@@ -1,16 +1,16 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { TradingSignal } from "@veytrix/shared";
 import { getSignals } from "@/lib/market-data-api";
-import { PairLogo } from "./pair-logo";
 import { MarketWatch, useMarketFeed, useMarketFavorites } from "./market-watch";
 
 export function Dashboard() {
   const feed = useMarketFeed();
   const { favorites } = useMarketFavorites();
   const [signals, setSignals] = useState<TradingSignal[]>([]);
+  const [biasExpanded, setBiasExpanded] = useState(false);
 
   const loadSignals = useCallback(async () => {
     try {
@@ -29,12 +29,7 @@ export function Dashboard() {
     void loadSignals();
   }, [loadSignals]);
 
-  const biases = useMemo(
-    () => signals.filter((s) => s.type === "bias" || s.type === "setup"),
-    [signals],
-  );
-  const topBias = biases[0];
-
+  const topBias = signals.find((signal) => signal.type === "bias");
 
 
   const connected = feed.status?.state === "connected";
@@ -95,26 +90,44 @@ export function Dashboard() {
           </Link>
         </div>
         {topBias ? (
-          <Link href="/signals" className="home-signal-card">
-            <PairLogo symbol={topBias.instrument} size="sm" />
-            <span className="home-signal-body">
-              <strong>
-                {topBias.instrument} ·{" "}
-                {topBias.direction === "bullish"
-                  ? "Bullish"
-                  : topBias.direction === "bearish"
-                    ? "Bearish"
-                    : "Neutral"}
-              </strong>
+          <div className="sig-bias-item home-bias-item">
+            <button
+              type="button"
+              className="sig-bias-row"
+              aria-expanded={biasExpanded}
+              aria-controls="home-bias-details"
+              onClick={() => setBiasExpanded((value) => !value)}
+            >
+              <span
+                className={"sig-bias-dot " + (topBias.direction === "bullish" ? "up" : topBias.direction === "bearish" ? "down" : "")}
+              />
               <span>
-                {topBias.timeframe}
-                {topBias.type === "setup" && topBias.riskReward
-                  ? ` · 1:${topBias.riskReward} RR`
-                  : " · bias"}
+                <strong>
+                  {topBias.instrument} ·{" "}
+                  {topBias.direction === "bullish"
+                    ? "Bullish bias"
+                    : topBias.direction === "bearish"
+                      ? "Bearish bias"
+                      : "Neutral bias"}{" "}
+                  · {topBias.confidence}%
+                </strong>
+                <span>{topBias.summary}</span>
               </span>
-            </span>
-            <span className="home-signal-chevron">›</span>
-          </Link>
+              <span className={"chevron" + (biasExpanded ? " expanded" : "")}>›</span>
+            </button>
+            {biasExpanded ? (
+              <div className="sig-bias-expanded" id="home-bias-details">
+                <div>
+                  <strong>Technical</strong>
+                  <p>{topBias.technicalExplanation || topBias.summary}</p>
+                </div>
+                <div>
+                  <strong>Fundamental</strong>
+                  <p>{topBias.fundamentalExplanation || "No confirmed recent fundamental direction is available for this pair."}</p>
+                </div>
+              </div>
+            ) : null}
+          </div>
         ) : (
           <div className="home-empty">No bias right now</div>
         )}
