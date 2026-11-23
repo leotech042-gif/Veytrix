@@ -426,6 +426,88 @@ function findFreshZones(
     }
   }
 
+  // A breaker is a failed opposing block: the opposite displacement forms
+  // first, price then closes through the block, and only afterwards retests it.
+  const breakerStart = Math.max(0, shiftIndex - 24);
+  const oppositeDirection: Direction = direction === "bullish" ? "bearish" : "bullish";
+  for (let blockIndex = breakerStart; blockIndex < shiftIndex - 2; blockIndex += 1) {
+    const block = candles[blockIndex];
+    const opposingCandle =
+      direction === "bullish" ? block.close < block.open : block.close > block.open;
+    if (!opposingCandle) continue;
+
+    for (
+      let impulseIndex = blockIndex + 1;
+      impulseIndex <= Math.min(shiftIndex - 2, blockIndex + 4);
+      impulseIndex += 1
+    ) {
+      const oppositeImpulse = candles[impulseIndex];
+      if (
+        !isDisplacement(
+          oppositeImpulse,
+          candles.slice(0, impulseIndex),
+          oppositeDirection,
+        )
+      ) {
+        continue;
+      }
+
+      let breakoutIndex = -1;
+      for (let index = impulseIndex + 1; index <= shiftIndex; index += 1) {
+        const bar = candles[index];
+        const closedThrough =
+          direction === "bullish"
+            ? bar.close > block.high
+            : bar.close < block.low;
+        if (closedThrough && isDisplacement(bar, candles.slice(0, index), direction)) {
+          breakoutIndex = index;
+        }
+      }
+      if (breakoutIndex < 0) continue;
+
+      const later = candles.slice(breakoutIndex + 1);
+      const invalidated = later.some((bar) =>
+        direction === "bullish"
+          ? bar.close < block.low
+          : bar.close > block.high,
+      );
+      if (invalidated) continue;
+
+      const fill = mitigationFill(
+        candles,
+        breakoutIndex,
+        block.high,
+        block.low,
+        direction,
+      );
+      const touched =
+        price >= block.low - tolerance &&
+        price <= block.high + tolerance &&
+        (direction === "bullish"
+          ? candles[candles.length - 1].low <= block.high + tolerance
+          : candles[candles.length - 1].high >= block.low - tolerance);
+      if (
+        fill < 0.5 &&
+        touched &&
+        isRejectionCandle(
+          candles[candles.length - 1],
+          direction,
+          candles[candles.length - 2],
+        )
+      ) {
+        zones.push({
+          top: block.high,
+          bottom: block.low,
+          mid: (block.high + block.low) / 2,
+          kind: "BREAKER_BLOCK",
+          createdIndex: breakoutIndex,
+          fill,
+        });
+      }
+      break;
+    }
+  }
+
   const searchStart = Math.max(0, shiftIndex - 5);
   for (let impulseIndex = shiftIndex; impulseIndex >= searchStart; impulseIndex -= 1) {
     const impulse = candles[impulseIndex];
@@ -448,16 +530,11 @@ function findFreshZones(
           ? candles[candles.length - 1].low <= top + tolerance
           : candles[candles.length - 1].high >= bottom - tolerance);
       if (fill < 0.5 && touched) {
-        const brokenThrough = candles
-          .slice(index + 1, candles.length - 1)
-          .some((bar) =>
-            direction === "bullish" ? bar.close > top : bar.close < bottom,
-          );
         zones.push({
           top,
           bottom,
           mid: (top + bottom) / 2,
-          kind: brokenThrough ? "BREAKER_BLOCK" : "ORDER_BLOCK",
+          kind: "ORDER_BLOCK",
           createdIndex: impulseIndex,
           fill,
         });
