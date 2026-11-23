@@ -205,7 +205,7 @@ function FundamentalsPage() {
       {loading && <div className="home-empty">Loading macroeconomic data…</div>}
       {!loading && status?.state !== "connected" && (
         <div className="home-empty" role="status">
-          {status?.message ?? error ?? "FXMacroData is not connected."}
+          {status?.message ?? error ?? "Forex Factory calendar is not connected."}
         </div>
       )}
       {!loading && error && <div className="inline-error" role="alert">{error}</div>}

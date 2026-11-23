@@ -207,9 +207,8 @@ export class NewsIntelligenceService {
           weight: 0,
           articleIds: new Set<string>(),
         };
-        const weight = Math.abs(item.score);
         current.total += item.score;
-        current.weight += weight;
+        current.weight += 100;
         current.articleIds.add(article.id);
         currencyScores.set(item.currency, current);
       }
