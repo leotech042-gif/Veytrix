@@ -79,6 +79,13 @@ function shiftDateKey(dateKey: string, days: number): string {
   const [year, month, day] = dateKey.split("-").map(Number);
   return localDateKey(new Date(year, month - 1, day + days));
 }
+
+function localDayWindow(dateKey: string): { from: string; to: string } {
+  const [year, month, day] = dateKey.split("-").map(Number);
+  const start = new Date(year, month - 1, day);
+  const end = new Date(year, month - 1, day + 1);
+  return { from: start.toISOString(), to: end.toISOString() };
+}
 function FundamentalsPage() {
   const [status, setStatus] = useState<FundamentalsStatus | null>(null);
   const [events, setEvents] = useState<EconomicEvent[]>([]);
@@ -93,10 +100,6 @@ function FundamentalsPage() {
 
   useEffect(() => {
     let cancelled = false;
-    void getNewsIntelligence()
-      .then((value) => { if (!cancelled) setNewsIntel(value); })
-      .catch(() => { if (!cancelled) setNewsIntel(null); })
-      .finally(() => { if (!cancelled) setNewsLoading(false); });
     void (async () => {
       try {
         const st = await getFundamentalsStatus();
@@ -122,6 +125,29 @@ function FundamentalsPage() {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (selectedDate > todayKey) {
+      setNewsIntel(null);
+      setNewsLoading(false);
+      return () => { cancelled = true; };
+    }
+
+    setNewsLoading(true);
+    setNewsIntel(null);
+    const window = localDayWindow(selectedDate);
+    if (selectedDate === todayKey) {
+      window.to = new Date().toISOString();
+    }
+
+    void getNewsIntelligence(window.from, window.to)
+      .then((value) => { if (!cancelled) setNewsIntel(value); })
+      .catch(() => { if (!cancelled) setNewsIntel(null); })
+      .finally(() => { if (!cancelled) setNewsLoading(false); });
+
+    return () => { cancelled = true; };
+  }, [selectedDate, todayKey]);
 
   const filtered = useMemo(() => {
     return events
@@ -154,16 +180,37 @@ function FundamentalsPage() {
       <section className="fx-news-intelligence">
         <div className="fx-news-heading">
           <div>
-            <span className="mw-eyebrow">LIVE GLOBAL HEADLINES</span>
+            <span className="mw-eyebrow">
+              {selectedDate > todayKey
+                ? "UPCOMING MARKET EVENTS"
+                : selectedDate === todayKey
+                  ? "TODAY'S GLOBAL HEADLINES"
+                  : "HISTORICAL HEADLINES"}
+            </span>
             <h3>News intelligence</h3>
-            <p>Macro headlines mapped to currency strength and relative pair bias.</p>
+            <p>
+              {selectedDate > todayKey
+                ? "Published news is not available for a future date. Scheduled releases appear in the calendar below."
+                : "Headlines and currency-pair bias calculated only from news published on the selected date."}
+            </p>
           </div>
           <span className={"fx-news-state " + (newsIntel?.state === "connected" ? "online" : "offline")}>
-            {newsLoading ? "Updating…" : newsIntel?.state === "connected" ? "Live feed" : "Feed limited"}
+            {selectedDate > todayKey
+              ? "Calendar view"
+              : newsLoading
+                ? "Updating…"
+                : newsIntel?.state === "connected"
+                  ? selectedDate === todayKey ? "Today's feed" : "Historical feed"
+                  : "Feed limited"}
           </span>
         </div>
-        {newsLoading && <div className="home-empty">Scanning recent financial headlines…</div>}
-        {!newsLoading && newsIntel && (
+        {selectedDate > todayKey && (
+          <div className="home-empty">No future headlines are shown. Use the economic calendar below to review upcoming releases.</div>
+        )}
+        {newsLoading && selectedDate <= todayKey && (
+          <div className="home-empty">Loading headlines for {selectedDate === todayKey ? "today" : selectedDateLabel}…</div>
+        )}
+        {!newsLoading && selectedDate <= todayKey && newsIntel && (
           <>
             <p className="fx-news-disclaimer">{newsIntel.note}</p>
             {newsIntel.pairBiases.length > 0 && (
@@ -189,9 +236,9 @@ function FundamentalsPage() {
                   <a href={article.url} target="_blank" rel="noopener noreferrer">{article.title}</a>
                   <p>{article.summary}</p>
                   <div className="fx-news-tags">
-                    {article.currencyImpacts.map((impact) => (
-                      <span key={impact.currency} className={"fx-news-direction " + impact.bias}>
-                        {impact.currency} · {impact.bias}
+                    {article.currencyImpacts.map((item) => (
+                      <span key={item.currency} className={"fx-news-direction " + item.bias}>
+                        {item.currency} · {item.bias}
                       </span>
                     ))}
                   </div>
@@ -199,11 +246,11 @@ function FundamentalsPage() {
               ))}
             </div>
             {newsIntel.articles.length === 0 && (
-              <div className="home-empty">{newsIntel.note}</div>
+              <div className="home-empty">No qualifying macro headlines were found for {selectedDate === todayKey ? "today" : selectedDateLabel}.</div>
             )}
           </>
         )}
-        {!newsLoading && !newsIntel && (
+        {!newsLoading && selectedDate <= todayKey && !newsIntel && (
           <div className="home-empty">News analysis is temporarily unavailable. No bias has been fabricated.</div>
         )}
       </section>
