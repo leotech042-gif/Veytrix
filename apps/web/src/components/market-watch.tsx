@@ -445,9 +445,16 @@ export function MarketWatch({
     }
     const candles = dailyHistory[instrument.symbol.toUpperCase()];
     if (!candles || candles.length < 2) return null;
-    // Compare the current provider quote with the prior completed session close.
-    // This remains meaningful through weekends and market holidays.
-    const base = candles[candles.length - 2].close;
+    // Compare the live quote with the most recent completed daily candle.
+    // On weekends/holidays the final available candle may already be complete.
+    const lastCandle = candles[candles.length - 1];
+    const lastStart = Date.parse(lastCandle.time);
+    const lastIsComplete =
+      Number.isFinite(lastStart) && lastStart + 24 * 60 * 60_000 <= Date.now();
+    const referenceCandle = lastIsComplete
+      ? lastCandle
+      : candles[candles.length - 2];
+    const base = referenceCandle.close;
     const currentPrice = quote?.last ?? quote?.bid ?? quote?.ask;
     if (currentPrice === undefined || !Number.isFinite(currentPrice) || !Number.isFinite(base) || base <= 0) return null;
     return ((currentPrice - base) / base) * 100;
