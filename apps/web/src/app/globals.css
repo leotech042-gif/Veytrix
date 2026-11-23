@@ -496,3 +496,60 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outlin
   .fx-event-header { gap:8px; }
   .fx-event-time { flex-basis:48px; }
 }
+
+
+/* Veytrix watchlist row alignment: Market + Home shared component */
+.mw-market-list { overflow:hidden; }
+.mw-list-head { min-height:38px; padding:9px 14px; }
+.mw-market-row {
+  grid-template-columns:minmax(150px,1fr) 88px minmax(112px,132px) 30px;
+  gap:14px;
+  min-height:72px;
+  padding:10px 14px;
+}
+.mw-market-identity { gap:10px; }
+.mw-market-identity .pair-logo { width:48px; height:36px; }
+.mw-market-identity .pair-logo__badge { width:31px; height:31px; }
+.mw-row-spark .mw-sparkline,
+.mw-row-spark .mw-spark-empty { max-width:88px; height:30px; }
+.mw-row-quote { gap:6px; }
+.mw-row-quote > strong { font-size:14px; letter-spacing:-.15px; }
+.mw-row-quote .mw-change { min-width:64px; justify-content:center; font-size:10px; font-weight:750; }
+.mw-star { justify-self:end; width:30px; height:30px; font-size:22px; }
+.mw-compact .mw-market-row { min-height:66px; }
+.mw-compact .mw-list-head { min-height:34px; }
+
+@media (max-width:760px) {
+  .mw-market-row {
+    grid-template-columns:minmax(0,1fr) 54px minmax(86px,96px) 24px;
+    gap:6px;
+    min-height:68px;
+    padding:9px 10px;
+  }
+  .mw-market-identity { gap:6px; }
+  .mw-market-identity .pair-logo {
+    width:40px;
+    height:32px;
+    transform:none;
+  }
+  .mw-market-identity .pair-logo__badge {
+    width:28px;
+    height:28px;
+    top:2px;
+    border-width:1.5px;
+  }
+  .mw-market-identity .pair-logo__flag { font-size:17px; }
+  .mw-market-identity .pair-logo__gold,
+  .mw-market-identity .pair-logo__silver { font-size:10px; }
+  .mw-market-identity .pair-logo__bitcoin { font-size:18px; }
+  .mw-market-identity .pair-logo__ethereum { font-size:16px; }
+  .mw-symbol { font-size:12px; }
+  .mw-instrument-name { font-size:9px; }
+  .mw-row-spark .mw-sparkline,
+  .mw-row-spark .mw-spark-empty { width:54px; max-width:54px; height:22px; }
+  .mw-row-quote { gap:4px; }
+  .mw-row-quote > strong { font-size:12px; }
+  .mw-row-quote .mw-change { min-width:0; padding:3px 5px; font-size:9px; }
+  .mw-star { width:24px; height:28px; font-size:20px; }
+  .mw-compact .mw-market-row { min-height:64px; }
+}
