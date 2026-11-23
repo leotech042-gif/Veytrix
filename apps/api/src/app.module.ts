@@ -11,6 +11,8 @@ import { SignalsService } from "./signals/signals.service";
 import { SIGNAL_PROVIDER } from "./signals/signal-provider";
 import { TechnicalSignalProvider } from "./signals/technical-signal.provider";
 import { FundamentalsModule } from "./fundamentals/fundamentals.module";
+import { AlertsHub } from "./alerts/alerts.hub";
+import { AlertsScanner } from "./alerts/alerts.scanner";
 
 @Module({
   imports: [
@@ -30,12 +32,13 @@ import { FundamentalsModule } from "./fundamentals/fundamentals.module";
       provide: MARKET_DATA_PROVIDER,
       useClass: TiingoMarketDataProvider,
     },
-
     TechnicalSignalProvider,
     {
       provide: SIGNAL_PROVIDER,
       useExisting: TechnicalSignalProvider,
     },
+    AlertsHub,
+    AlertsScanner,
     {
       provide: APP_GUARD,
       useClass: ThrottlerGuard,

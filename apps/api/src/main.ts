@@ -4,6 +4,7 @@ import helmet from "helmet";
 import { ValidationPipe } from "@nestjs/common";
 import { NestFactory } from "@nestjs/core";
 import { AppModule } from "./app.module";
+import { AlertsHub } from "./alerts/alerts.hub";
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -26,6 +27,10 @@ async function bootstrap() {
 
   const port = Number(process.env.PORT ?? 4000);
   await app.listen(port);
+
+  const httpServer = app.getHttpServer();
+  const hub = app.get(AlertsHub);
+  hub.attach(httpServer);
 }
 
 void bootstrap();
