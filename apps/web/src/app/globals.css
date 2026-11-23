@@ -521,3 +521,14 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outlin
 .fx-news-article > p { color:var(--muted,#9ba3b3); font-size:11px; line-height:1.55; margin:6px 0; }
 .fx-news-tags { display:flex; flex-wrap:wrap; gap:6px; }
 @media (max-width:640px) { .fx-news-intelligence { padding:13px; } .fx-news-heading { flex-direction:column; } }
+
+
+/* Day navigation for the fundamentals calendar */
+.fx-calendar-day-nav { display:flex; align-items:center; justify-content:space-between; gap:14px; margin:18px 0 12px; padding:13px 15px; border:1px solid var(--border-subtle); border-radius:13px; background:var(--surface-raised); }
+.fx-calendar-day-copy { display:flex; flex-direction:column; gap:3px; }
+.fx-calendar-day-copy strong { color:var(--text); font-size:15px; }
+.fx-calendar-day-copy > span:last-child { color:var(--muted); font-size:10px; }
+.fx-calendar-day-actions { display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
+.fx-calendar-day-actions button { border:1px solid var(--border-subtle); border-radius:8px; padding:8px 10px; background:var(--bg-elevated); color:var(--text-secondary); font:inherit; font-size:10px; font-weight:700; cursor:pointer; }
+.fx-calendar-day-actions button:hover,.fx-calendar-day-actions button.active { border-color:var(--accent); color:var(--accent); }
+@media (max-width:640px) { .fx-calendar-day-nav { align-items:flex-start; flex-direction:column; } .fx-calendar-day-actions { width:100%; } .fx-calendar-day-actions button { flex:1; } }
