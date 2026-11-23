@@ -1,6 +1,7 @@
 import { Inject, Injectable, Logger } from "@nestjs/common";
 import type {
   ChartTimeframe,
+  EconomicEvent,
   MarketCandle,
   MarketInstrument,
   MarketQuote,
@@ -9,6 +10,8 @@ import type {
   TradingSignal,
 } from "@veytrix/shared";
 import type { SignalProvider, SignalQuery } from "./signal-provider";
+import { FundamentalsService } from "../fundamentals/fundamentals.service";
+import { analysePriceAction } from "./price-action-engine";
 import {
   MARKET_DATA_PROVIDER,
   type MarketDataProvider,
@@ -73,73 +76,90 @@ interface SetupResult {
 export class TechnicalSignalProvider implements SignalProvider {
   private readonly logger = new Logger(TechnicalSignalProvider.name);
   private readonly signalCache = new Map<string, CachedSignal>();
-  private readonly signalCacheMs = 10 * 60_000;
+  private readonly signalCacheMs = 60_000;
 
   constructor(
     @Inject(MARKET_DATA_PROVIDER)
     private readonly marketData: MarketDataProvider,
+    @Inject(FundamentalsService)
+    private readonly fundamentals: FundamentalsService,
   ) {}
 
-  getStatus(): SignalProviderStatus {
-    const open = isForexMarketOpen();
+  async getStatus(): Promise<SignalProviderStatus> {
+    const status = await this.marketData.getStatus();
+    if (status.state === "unconfigured") {
+      return {
+        state: "unconfigured",
+        provider: null,
+        message: "Signal analysis is unavailable until a live market-data provider is configured.",
+      };
+    }
+    if (status.state === "disconnected") {
+      return {
+        state: "disconnected",
+        provider: "Veytrix Technical Engine",
+        message: status.message,
+      };
+    }
+
     return {
       state: "connected",
       provider: "Veytrix Technical Engine",
-      message: open
-        ? "Market open · multi-TF PA · setup on confluence"
-        : "Market closed · last bias held",
+      message: isForexMarketOpen()
+        ? "Market data connected · multi-timeframe analysis"
+        : "Market data connected · market session closed",
       updatedAt: new Date().toISOString(),
+      delayed: status.delayed,
     };
   }
 
   async getSignals(query?: SignalQuery): Promise<readonly TradingSignal[]> {
     try {
+      const marketStatus = await this.marketData.getStatus();
+      if (marketStatus.state !== "connected") return [];
+
       const quotes = (await this.marketData.getQuotes()) as MarketQuote[];
+      if (!quotes.length) return [];
+
       const instruments = this.marketData.getInstruments
         ? ((await this.marketData.getInstruments()) as MarketInstrument[])
         : [];
 
-      if (!quotes.length && !query?.instrument) {
-        this.logger.warn("No quotes available for signal scan.");
-        return [];
-      }
-
-      const marketOpen = isForexMarketOpen();
       const instrumentFilter = query?.instrument?.toUpperCase();
       const favorites = (query?.favorites ?? [])
-        .map((s) => s.toUpperCase())
+        .map((symbol) => symbol.toUpperCase())
         .filter(Boolean);
 
-      let symbols: string[] = [];
-      if (instrumentFilter) {
-        symbols = [instrumentFilter];
-      } else if (favorites.length > 0) {
-        symbols = favorites.slice(0, 8);
-      } else {
-        return [];
-      }
+      const symbols = instrumentFilter
+        ? [instrumentFilter]
+        : favorites.slice(0, 8);
+      if (symbols.length === 0) return [];
 
+      const now = Date.now();
+      const events = await this.safeCalendar(
+        new Date(now - 72 * 60 * 60_000).toISOString(),
+        new Date(now + 24 * 60 * 60_000).toISOString(),
+      );
+      const marketOpen = isForexMarketOpen();
       const signals: TradingSignal[] = [];
       const deep = Boolean(instrumentFilter);
 
       for (const symbol of symbols) {
         const cached = this.signalCache.get(symbol);
-        if (cached && Date.now() - cached.at < this.signalCacheMs) {
+        if (cached && now - cached.at < this.signalCacheMs) {
           signals.push(cached.signal);
           continue;
         }
 
-        const quote =
-          quotes.find((q) => q.instrument.toUpperCase() === symbol) ??
-          ({
-            instrument: symbol,
-            asOf: new Date().toISOString(),
-            last: undefined,
-            delayed: true,
-          } as MarketQuote);
+        const quote = quotes.find(
+          (item) => item.instrument.toUpperCase() === symbol,
+        );
+        if (!quote || (quote.last === undefined && quote.bid === undefined)) {
+          continue;
+        }
 
         const instrument =
-          instruments.find((i) => i.symbol.toUpperCase() === symbol) ??
+          instruments.find((item) => item.symbol.toUpperCase() === symbol) ??
           ({
             symbol,
             displayName: symbol,
@@ -152,15 +172,16 @@ export class TechnicalSignalProvider implements SignalProvider {
           instrument,
           marketOpen,
           deep,
+          events,
         );
 
         if (analysis) {
-          this.signalCache.set(symbol, { at: Date.now(), signal: analysis });
+          this.signalCache.set(symbol, { at: now, signal: analysis });
           signals.push(analysis);
         }
 
         if (!instrumentFilter) {
-          await new Promise((r) => setTimeout(r, 250));
+          await new Promise((resolve) => setTimeout(resolve, 150));
         }
       }
 
@@ -169,8 +190,8 @@ export class TechnicalSignalProvider implements SignalProvider {
         if (b.type === "setup" && a.type !== "setup") return 1;
         return b.confidence - a.confidence;
       });
-    } catch (err) {
-      this.logger.error("Signal scan failed", err);
+    } catch (error) {
+      this.logger.error("Signal scan failed", error);
       return [];
     }
   }
@@ -180,246 +201,215 @@ export class TechnicalSignalProvider implements SignalProvider {
     instrument: MarketInstrument,
     marketOpen: boolean,
     deep: boolean,
+    events: readonly EconomicEvent[],
   ): Promise<TradingSignal | null> {
-    const mid =
+    const price =
       quote.last ??
       (quote.bid !== undefined && quote.ask !== undefined
         ? (quote.bid + quote.ask) / 2
-        : undefined);
+        : quote.bid ?? quote.ask);
+    if (price === undefined || !Number.isFinite(price) || price <= 0) return null;
 
-    const precision = instrument.pricePrecision ?? 5;
-    const now = new Date().toISOString();
-    const sessionNote = marketOpen ? "Market open." : "Market closed.";
+    const spread =
+      quote.spread ??
+      (quote.bid !== undefined && quote.ask !== undefined
+        ? Math.max(0, quote.ask - quote.bid)
+        : 0);
 
-    const d1 = await this.safeHistory(quote.instrument, "D1");
-    const h4 = await this.safeHistory(quote.instrument, "H4");
-    const h1 = await this.safeHistory(quote.instrument, "H1");
-    const m15 = await this.safeHistory(quote.instrument, "M15");
-    const m30 = await this.safeHistory(quote.instrument, "M30");
-    const m5 = deep ? await this.safeHistory(quote.instrument, "M5") : [];
+    const [d1, h4, h1, m15, m5] = await Promise.all([
+      this.safeHistory(instrument.symbol, "D1"),
+      this.safeHistory(instrument.symbol, "H4"),
+      this.safeHistory(instrument.symbol, "H1"),
+      this.safeHistory(instrument.symbol, "M15"),
+      deep ? this.safeHistory(instrument.symbol, "M5") : Promise.resolve([]),
+    ]);
 
-    let changePercent: number | null = null;
-    let refLabel = "vs prior close";
+    const analysis = analysePriceAction({
+      instrument: instrument.symbol,
+      price,
+      spread,
+      d1,
+      h4,
+      h1,
+      m15,
+      m5,
+    });
+    const fundamentalExplanation = this.buildFundamentalExplanation(
+      instrument.symbol,
+      events,
+    );
+    const createdAt = new Date().toISOString();
 
-    if (d1.length >= 1 && mid !== undefined && mid > 0) {
-      const lastBar = d1[d1.length - 1];
-      const lastBarDay = String(lastBar.time).slice(0, 10);
-      const today = new Date().toISOString().slice(0, 10);
-      const prevClose =
-        lastBarDay === today && d1.length >= 2
-          ? d1[d1.length - 2].close
-          : lastBar.close;
-      if (prevClose > 0) {
-        changePercent = ((mid - prevClose) / prevClose) * 100;
-      }
-    }
-
-    if (
-      changePercent === null &&
-      typeof quote.changePercent === "number" &&
-      Number.isFinite(quote.changePercent)
-    ) {
-      changePercent = quote.changePercent;
-      refLabel = "quote change%";
-    }
-
-    if ((mid === undefined || mid <= 0) && changePercent === null) {
-      return null;
-    }
-
-    let direction: SignalDirection = "neutral";
-    let confidence = 40;
-    const reasons: string[] = [];
-
-    if (changePercent !== null) {
-      if (changePercent >= 0.12) {
-        direction = "bullish";
-        confidence = Math.min(88, 50 + Math.abs(changePercent) * 12);
-        reasons.push(
-          `D1 session bias bullish (+${changePercent.toFixed(2)}% ${refLabel})`,
-        );
-      } else if (changePercent <= -0.12) {
-        direction = "bearish";
-        confidence = Math.min(88, 50 + Math.abs(changePercent) * 12);
-        reasons.push(
-          `D1 session bias bearish (${changePercent.toFixed(2)}% ${refLabel})`,
-        );
-      } else {
-        reasons.push(
-          `D1 session flat (${changePercent >= 0 ? "+" : ""}${changePercent.toFixed(2)}% ${refLabel})`,
-        );
-      }
-    }
-
-    const h4Struct = this.structureBias(h4);
-    const h1Struct = this.structureBias(h1);
-    const bosH1 = this.detectBosChoch(h1);
-
-    if (h4Struct && h4Struct !== "neutral") {
-      if (direction === "neutral") {
-        direction = h4Struct;
-        confidence = Math.min(72, confidence + 14);
-        reasons.push(`H4 structure ${h4Struct}`);
-      } else if (h4Struct === direction) {
-        confidence = Math.min(94, confidence + 10);
-        reasons.push(`H4 structure agrees (${h4Struct})`);
-      } else {
-        confidence = Math.max(32, confidence - 12);
-        reasons.push(`H4 structure opposes (${h4Struct})`);
-      }
-    }
-
-    if (h1Struct && h1Struct !== "neutral") {
-      if (h1Struct === direction) {
-        confidence = Math.min(95, confidence + 6);
-        reasons.push(`H1 structure agrees`);
-      } else if (direction !== "neutral") {
-        confidence = Math.max(30, confidence - 8);
-        reasons.push(`H1 leans ${h1Struct}`);
-      }
-    }
-
-    if (bosH1) {
-      if (bosH1.kind === "bos" && bosH1.direction === direction) {
-        confidence = Math.min(96, confidence + 8);
-        reasons.push(`H1 BOS ${bosH1.direction}`);
-      } else if (bosH1.kind === "choch") {
-        reasons.push(`H1 CHoCH → ${bosH1.direction}`);
-        if (direction === "neutral") {
-          direction = bosH1.direction;
-          confidence = Math.min(70, confidence + 10);
-        } else if (bosH1.direction === direction) {
-          confidence = Math.min(94, confidence + 6);
-        } else {
-          confidence = Math.max(28, confidence - 10);
-        }
-      }
-    }
-
-    const price = mid ?? quote.last ?? 0;
-    if (price <= 0 || direction === "neutral") {
-      const arrow =
-        direction === "bullish" ? "↑" : direction === "bearish" ? "↓" : "→";
+    if (analysis.setup) {
+      const setup = analysis.setup;
       return {
-        id: `${quote.instrument}-bias-${Date.now()}`,
-        instrument: quote.instrument,
-        type: "bias",
-        direction,
-        confidence: Math.round(confidence),
-        timeframe: "D1",
-        title: `${arrow} ${this.capitalize(direction)} · ${quote.instrument}`,
-        summary: `${reasons.join(". ") || "No clear directional edge"}. ${sessionNote}`,
-        createdAt: now,
-        marketOpen,
-      } as TradingSignal;
-    }
-
-    const entryFrames = (
-      [
-        { tf: "M5" as ChartTimeframe, candles: m5 },
-        { tf: "M15" as ChartTimeframe, candles: m15 },
-        { tf: "M30" as ChartTimeframe, candles: m30 },
-        { tf: "H1" as ChartTimeframe, candles: h1 },
-      ] as const
-    ).filter((x) => x.candles.length >= 20) as {
-      tf: ChartTimeframe;
-      candles: MarketCandle[];
-    }[];
-
-    let bestSetup: SetupResult | null = null;
-    let bestScore = 0;
-
-    for (const frame of entryFrames) {
-      const setup = this.buildConfluenceSetup(
-        frame.candles,
-        direction,
-        price,
-        precision,
-        frame.tf,
-      );
-      if (!setup) continue;
-      const score =
-        setup.tags.length * 10 +
-        setup.riskReward * 4 +
-        (frame.tf === "M5"
-          ? 3
-          : frame.tf === "M15"
-            ? 2
-            : frame.tf === "M30"
-              ? 1
-              : 0);
-      if (score > bestScore) {
-        bestScore = score;
-        bestSetup = setup;
-      }
-    }
-
-    if (
-      bestSetup &&
-      bestSetup.tags.length >= 2 &&
-      bestSetup.riskReward >= 5 &&
-      confidence >= 52
-    ) {
-      const riskPips = toPips(
-        quote.instrument,
-        bestSetup.entry - bestSetup.stopLoss,
-      );
-      const rewardPips = toPips(
-        quote.instrument,
-        bestSetup.takeProfit3 - bestSetup.entry,
-      );
-      confidence = Math.min(
-        96,
-        confidence + bestSetup.tags.length * 3 + (bestSetup.riskReward - 5) * 3,
-      );
-      reasons.push(
-        `Entry ${bestSetup.timeframe}: ${bestSetup.tags.join(" + ")}`,
-      );
-      reasons.push(
-        `R:R 1:${bestSetup.riskReward} · risk ${riskPips} pips · reward ${rewardPips} pips`,
-      );
-      reasons.push(
-        `TP1 ${bestSetup.takeProfit1} · TP2 ${bestSetup.takeProfit2} · TP3 ${bestSetup.takeProfit3}`,
-      );
-
-      return {
-        id: `${quote.instrument}-setup-${Date.now()}`,
-        instrument: quote.instrument,
+        id: instrument.symbol + "-setup-" + Date.now(),
+        instrument: instrument.symbol,
         type: "setup",
-        direction,
-        confidence: Math.round(confidence),
-        timeframe: bestSetup.timeframe,
-        title: `${direction === "bullish" ? "Buy" : "Sell"} Setup – ${quote.instrument}`,
-        summary: `${reasons.join(". ")}. ${sessionNote}`,
-        entry: bestSetup.entry,
-        stopLoss: bestSetup.stopLoss,
-        takeProfit: bestSetup.takeProfit3,
-        takeProfit1: bestSetup.takeProfit1,
-        takeProfit2: bestSetup.takeProfit2,
-        takeProfit3: bestSetup.takeProfit3,
-        riskReward: bestSetup.riskReward,
-        riskPips,
-        rewardPips,
-        tags: bestSetup.tags,
-        createdAt: now,
+        direction: analysis.direction,
+        confidence: setup.confidence,
+        timeframe: setup.timeframe,
+        title:
+          (analysis.direction === "bullish" ? "Buy" : "Sell") +
+          " Setup – " +
+          instrument.symbol,
+        summary: setup.explanation,
+        technicalExplanation: analysis.technicalExplanation,
+        fundamentalExplanation,
+        entry: setup.entry,
+        stopLoss: setup.stopLoss,
+        takeProfit: setup.takeProfit,
+        takeProfit1: setup.takeProfit1,
+        takeProfit2: setup.takeProfit2,
+        takeProfit3: setup.takeProfit,
+        riskReward: setup.riskReward,
+        riskPips: setup.riskPips,
+        rewardPips: setup.rewardPips,
+        tags: setup.tags,
+        createdAt,
         marketOpen,
-      } as TradingSignal;
+      } satisfies TradingSignal;
     }
 
     const arrow =
-      direction === "bullish" ? "↑" : direction === "bearish" ? "↓" : "→";
+      analysis.direction === "bullish"
+        ? "↑"
+        : analysis.direction === "bearish"
+          ? "↓"
+          : "→";
+    const directionLabel =
+      analysis.direction === "bullish"
+        ? "Bullish"
+        : analysis.direction === "bearish"
+          ? "Bearish"
+          : "Neutral";
+
     return {
-      id: `${quote.instrument}-bias-${Date.now()}`,
-      instrument: quote.instrument,
+      id: instrument.symbol + "-bias-" + Date.now(),
+      instrument: instrument.symbol,
       type: "bias",
-      direction,
-      confidence: Math.round(confidence),
-      timeframe: "D1",
-      title: `${arrow} ${this.capitalize(direction)} · ${quote.instrument}`,
-      summary: `${reasons.join(". ") || "Bias only — no entry confluence"}. ${sessionNote}`,
-      createdAt: now,
+      direction: analysis.direction,
+      confidence: analysis.confidence,
+      timeframe: "H4",
+      title: arrow + " " + directionLabel + " · " + instrument.symbol,
+      summary:
+        directionLabel +
+        " structure bias · no confirmed M15 entry yet.",
+      technicalExplanation: analysis.technicalExplanation,
+      fundamentalExplanation,
+      createdAt,
       marketOpen,
-    } as TradingSignal;
+    } satisfies TradingSignal;
+  }
+
+  private async safeCalendar(
+    from: string,
+    to: string,
+  ): Promise<EconomicEvent[]> {
+    try {
+      return [...(await this.fundamentals.getCalendar(from, to))];
+    } catch (error) {
+      this.logger.warn(
+        "Fundamental calendar unavailable for signal context",
+        error instanceof Error ? error.message : error,
+      );
+      return [];
+    }
+  }
+
+  private buildFundamentalExplanation(
+    instrument: string,
+    events: readonly EconomicEvent[],
+  ): string {
+    const now = Date.now();
+    const pairEvents = events.flatMap((event) => {
+      const pair = event.affectedPairs?.find(
+        (item) => item.symbol.toUpperCase() === instrument.toUpperCase(),
+      );
+      if (!pair) return [];
+
+      const timestamp = Date.parse(event.time);
+      if (!Number.isFinite(timestamp)) return [];
+
+      return [{ event, pair, timestamp }];
+    });
+
+    const recent = pairEvents.filter(
+      ({ event, pair, timestamp }) =>
+        timestamp <= now &&
+        now - timestamp <= 48 * 60 * 60_000 &&
+        event.actual !== null &&
+        event.estimate !== null &&
+        pair.bias !== "pending" &&
+        pair.bias !== "neutral",
+    );
+
+    let macroRead: string;
+    if (recent.length === 0) {
+      macroRead =
+        "No recent released economic result provides a confirmed directional read for " +
+        instrument +
+        ".";
+    } else {
+      const score = recent.reduce((total, item) => {
+        const weight =
+          item.event.impact === "high"
+            ? 3
+            : item.event.impact === "medium"
+              ? 2
+              : 1;
+        return total + (item.pair.bias === "bullish" ? weight : -weight);
+      }, 0);
+      const direction =
+        score > 0
+          ? "bullish"
+          : score < 0
+            ? "bearish"
+            : "mixed";
+      const names = recent
+        .sort((a, b) => b.timestamp - a.timestamp)
+        .slice(0, 2)
+        .map(({ event }) => event.currency + " " + event.event)
+        .join("; ");
+      macroRead =
+        "Recent released calendar data is " +
+        direction +
+        " for " +
+        instrument +
+        " (" +
+        names +
+        ").";
+    }
+
+    const upcoming = pairEvents
+      .filter(
+        ({ event, timestamp }) =>
+          timestamp > now &&
+          timestamp - now <= 6 * 60 * 60_000 &&
+          event.impact === "high",
+      )
+      .sort((a, b) => a.timestamp - b.timestamp)[0];
+
+    if (upcoming) {
+      const minutes = Math.max(
+        1,
+        Math.round((upcoming.timestamp - now) / 60_000),
+      );
+      const timing =
+        minutes >= 60
+          ? Math.round(minutes / 60) + "h"
+          : minutes + "m";
+      macroRead +=
+        " Upcoming high-impact " +
+        upcoming.event.currency +
+        " " +
+        upcoming.event.event +
+        " in " +
+        timing +
+        "; volatility risk may be elevated.";
+    }
+
+    return macroRead;
   }
 
   private structureBias(candles: MarketCandle[]): StructureBias | null {
