@@ -37,6 +37,7 @@ export function getEconomicCalendar(
   );
 }
 
-export function getNewsIntelligence(): Promise<NewsIntelligence> {
-  return getJson<NewsIntelligence>("/fundamentals/news");
+export function getNewsIntelligence(from: string, to: string): Promise<NewsIntelligence> {
+  const q = new URLSearchParams({ from, to });
+  return getJson<NewsIntelligence>(`/fundamentals/news?${q.toString()}`);
 }
