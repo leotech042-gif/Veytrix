@@ -373,7 +373,7 @@ export function MarketWatch({
   };
 
   return (
-    <section className={`panel mw-panel${compact ? " compact-panel mw-compact" : ""}`}>
+    <section className={`panel mw-panel mw-alienalgo-watchlist${compact ? " compact-panel mw-compact" : ""}`}>
       <div className="mw-header">
         <div>
           <div className="mw-eyebrow">VEYTRIX MARKETS</div>
@@ -484,18 +484,20 @@ export function MarketWatch({
                     <span className="mw-instrument-name">{pairName}</span>
                   </span>
                 </Link>
-                <div className="mw-row-spark">
+                <div className="mw-row-spark" aria-label={`Recent ${instrument.symbol} price trend`}>
                   <Sparkline values={historyBySymbol[instrument.symbol]} />
                 </div>
                 <div className="mw-row-quote">
-                  <strong>{price === undefined ? "—" : formatPrice(price, instrument)}</strong>
-                  {change === undefined ? (
-                    <span className="mw-change unavailable">—</span>
-                  ) : (
-                    <span className={`mw-change ${positive ? "positive" : "negative"}`}>
-                      {positive ? "+" : ""}{change.toFixed(2)}%
-                    </span>
-                  )}
+                  <div className="mw-quote-stack">
+                    <strong className="mw-quote-price">{price === undefined ? "—" : formatPrice(price, instrument)}</strong>
+                    {change === undefined ? (
+                      <span className="mw-change unavailable">—</span>
+                    ) : (
+                      <span className={`mw-change ${positive ? "positive" : "negative"}`}>
+                        {positive ? "+" : ""}{change.toFixed(2)}%
+                      </span>
+                    )}
+                  </div>
                 </div>
                 <button
                   className={`mw-star${isFavorite ? " selected" : ""}`}
