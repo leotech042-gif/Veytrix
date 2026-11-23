@@ -147,7 +147,7 @@ export class NewsIntelligenceService {
   }
 
   private toGdeltDate(timestamp: number): string {
-    return new Date(timestamp).toISOString().replace(/\\D/g, "").slice(0, 14);
+    return new Date(timestamp).toISOString().replace(/\D/g, "").slice(0, 14);
   }
 
   private analyseArticles(rows: GdeltArticle[], referenceTimeMs: number): NewsArticleAnalysis[] {
