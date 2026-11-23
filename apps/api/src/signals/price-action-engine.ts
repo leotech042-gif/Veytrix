@@ -507,6 +507,16 @@ function findFlipLevel(
     });
     if (breakoutIndex < 0) continue;
 
+    // APA Flip Type 1 also requires a recognisable single-candle formation
+    // around the multi-touch level before the breakout.
+    if (requireRetest) {
+      const formation = candles.slice(Math.max(1, breakoutIndex - 5), breakoutIndex);
+      const hasSingleCandleFormation = formation.some((candle, index) =>
+        isRejectionCandle(candle, direction, formation[index - 1]),
+      );
+      if (!hasSingleCandleFormation) continue;
+    }
+
     const afterBreak = candles.slice(breakoutIndex + 1);
     if (
       afterBreak.some((candle) =>
@@ -566,7 +576,8 @@ function hasFlipType2(
   const breakoutTime = Date.parse(flip.breakoutTime);
   return d1.some(
     (candle) =>
-      Date.parse(candle.time) + TIMEFRAME_MS.D1 > breakoutTime &&
+      Date.parse(candle.time) >=
+        breakoutTime + TIMEFRAME_MS.H4 &&
       hasWickOverlap(candle, flip.bandBottom, flip.bandTop),
   );
 }
