@@ -22,13 +22,14 @@ interface Sweep {
   index: number;
   level: number;
   extreme: number;
+  source: "EQUAL_LEVELS" | "SWING" | "ASIAN_RANGE";
 }
 
 interface EntryZone {
   top: number;
   bottom: number;
   mid: number;
-  kind: "FVG" | "ORDER_BLOCK" | "RETEST";
+  kind: "FVG" | "ORDER_BLOCK" | "BREAKER_BLOCK" | "RETEST";
   createdIndex: number;
   fill: number;
 }
@@ -168,6 +169,44 @@ function averageBody(candles: MarketCandle[]): number {
   );
 }
 
+interface AsianRange {
+  high: number;
+  low: number;
+  endIndex: number;
+}
+
+function findAsianRanges(candles: MarketCandle[]): AsianRange[] {
+  const sessions = new Map<string, AsianRange & { count: number }>();
+  for (let index = 0; index < candles.length; index += 1) {
+    const candle = candles[index];
+    const timestamp = Date.parse(candle.time);
+    if (!Number.isFinite(timestamp)) continue;
+    const date = new Date(timestamp);
+    const hour = date.getUTCHours();
+    // Fixed model window: 00:00–08:00 UTC. It is a liquidity reference, not an entry-time restriction.
+    if (hour < 0 || hour >= 8) continue;
+    const key = date.toISOString().slice(0, 10);
+    const existing = sessions.get(key);
+    if (existing) {
+      existing.high = Math.max(existing.high, candle.high);
+      existing.low = Math.min(existing.low, candle.low);
+      existing.endIndex = index;
+      existing.count += 1;
+    } else {
+      sessions.set(key, {
+        high: candle.high,
+        low: candle.low,
+        endIndex: index,
+        count: 1,
+      });
+    }
+  }
+  return [...sessions.values()]
+    .filter((session) => session.count >= 4)
+    .sort((a, b) => a.endIndex - b.endIndex)
+    .slice(-8);
+}
+
 function isDisplacement(
   candle: MarketCandle,
   history: MarketCandle[],
@@ -206,33 +245,77 @@ function findSweep(
   for (let index = candles.length - 1; index >= start; index -= 1) {
     const prior = candles.slice(0, index);
     const swings = findSwings(prior);
-    const pool = direction === "bullish"
+    const relevant = direction === "bullish"
       ? swings.filter((swing) => swing.kind === "low").slice(-5)
       : swings.filter((swing) => swing.kind === "high").slice(-5);
-    if (pool.length === 0) continue;
+    const sessions = findAsianRanges(prior).slice(-3);
+    const pools = [
+      ...relevant.map((swing) => ({
+        price: swing.price,
+        index: swing.index,
+        source: "SWING" as const,
+      })),
+      ...sessions.map((session) => ({
+        price: direction === "bullish" ? session.low : session.high,
+        index: session.endIndex,
+        source: "ASIAN_RANGE" as const,
+      })),
+    ];
+    if (pools.length === 0) continue;
 
-    const levels = pool.map((swing) => swing.price);
-    const level = direction === "bullish"
-      ? Math.min(...levels)
-      : Math.max(...levels);
+    const tolerance = atr * 0.1;
+    const clusters = pools
+      .map((pool) => {
+        const members = pools.filter(
+          (candidate) => Math.abs(candidate.price - pool.price) <= tolerance,
+        );
+        return {
+          members,
+          latestIndex: Math.max(...members.map((member) => member.index)),
+        };
+      })
+      .filter((cluster) => cluster.members.length >= 2)
+      .sort((a, b) =>
+        b.members.length - a.members.length ||
+        b.latestIndex - a.latestIndex,
+      );
+    const cluster = clusters[0];
+    const chosen = cluster
+      ? {
+          price:
+            cluster.members.reduce((sum, member) => sum + member.price, 0) /
+            cluster.members.length,
+          source: "EQUAL_LEVELS" as const,
+        }
+      : pools.sort((a, b) => b.index - a.index)[0];
     const candle = candles[index];
-    const tolerance = atr * 0.04;
+    const wickTolerance = atr * 0.04;
 
     if (
       direction === "bullish" &&
-      candle.low < level - tolerance &&
-      candle.close > level &&
+      candle.low < chosen.price - wickTolerance &&
+      candle.close > chosen.price &&
       candle.close > candle.open
     ) {
-      return { index, level, extreme: candle.low };
+      return {
+        index,
+        level: chosen.price,
+        extreme: candle.low,
+        source: chosen.source,
+      };
     }
     if (
       direction === "bearish" &&
-      candle.high > level + tolerance &&
-      candle.close < level &&
+      candle.high > chosen.price + wickTolerance &&
+      candle.close < chosen.price &&
       candle.close < candle.open
     ) {
-      return { index, level, extreme: candle.high };
+      return {
+        index,
+        level: chosen.price,
+        extreme: candle.high,
+        source: chosen.source,
+      };
     }
   }
   return null;
@@ -352,11 +435,16 @@ function findFreshZones(
           ? candles[candles.length - 1].low <= top + tolerance
           : candles[candles.length - 1].high >= bottom - tolerance);
       if (fill < 0.5 && touched) {
+        const brokenThrough = candles
+          .slice(index + 1, candles.length - 1)
+          .some((bar) =>
+            direction === "bullish" ? bar.close > top : bar.close < bottom,
+          );
         zones.push({
           top,
           bottom,
           mid: (top + bottom) / 2,
-          kind: "ORDER_BLOCK",
+          kind: brokenThrough ? "BREAKER_BLOCK" : "ORDER_BLOCK",
           createdIndex: index,
           fill,
         });
@@ -416,7 +504,7 @@ function findBreakRetest(
   candles: MarketCandle[],
   direction: Direction,
   atr: number,
-): { level: number; index: number } | null {
+): { level: number; index: number; touches: number } | null {
   if (candles.length < 24 || atr <= 0) return null;
   const last = candles[candles.length - 1];
   const tolerance = atr * 0.1;
@@ -431,6 +519,13 @@ function findBreakRetest(
     if (relevant.length === 0) continue;
 
     const level = relevant[relevant.length - 1].price;
+    const touches = prior
+      .slice(-40)
+      .filter((candle) =>
+        Math.abs(
+          (direction === "bullish" ? candle.high : candle.low) - level,
+        ) <= tolerance,
+      ).length;
     const broke = isDisplacement(candles[index], prior, direction) &&
       (direction === "bullish"
         ? candles[index].close > level
@@ -441,7 +536,7 @@ function findBreakRetest(
       ? last.low <= level + tolerance && last.close > level
       : last.high >= level - tolerance && last.close < level;
     if (retested && isRejectionCandle(last, direction, candles[candles.length - 2])) {
-      return { level, index };
+      return { level, index, touches };
     }
   }
   return null;
@@ -449,6 +544,8 @@ function findBreakRetest(
 
 function nearestOpposingLiquidity(
   candles: MarketCandle[][],
+  d1: MarketCandle[],
+  m15: MarketCandle[],
   direction: Direction,
   entry: number,
 ): number | null {
@@ -461,10 +558,45 @@ function nearestOpposingLiquidity(
       )
       .map((swing) => swing.price),
   );
-  if (levels.length === 0) return null;
+
+  // Previous completed daily range and prior-week extremes are objective external references.
+  const previousDay = d1[d1.length - 1];
+  if (previousDay) {
+    levels.push(direction === "bullish" ? previousDay.high : previousDay.low);
+  }
+  if (d1.length > 5) {
+    const thisMonday = new Date();
+    const day = thisMonday.getUTCDay();
+    thisMonday.setUTCHours(0, 0, 0, 0);
+    thisMonday.setUTCDate(thisMonday.getUTCDate() - ((day + 6) % 7));
+    const lastWeekStart = thisMonday.getTime() - 7 * 24 * 60 * 60_000;
+    const thisWeekStart = thisMonday.getTime();
+    const lastWeek = d1.filter((candle) => {
+      const time = Date.parse(candle.time);
+      return time >= lastWeekStart && time < thisWeekStart;
+    });
+    if (lastWeek.length > 0) {
+      levels.push(
+        direction === "bullish"
+          ? Math.max(...lastWeek.map((candle) => candle.high))
+          : Math.min(...lastWeek.map((candle) => candle.low)),
+      );
+    }
+  }
+
+  const asianRanges = findAsianRanges(m15);
+  for (const session of asianRanges.slice(-5)) {
+    levels.push(direction === "bullish" ? session.high : session.low);
+  }
+
+  const valid = levels.filter((level) =>
+    Number.isFinite(level) &&
+    (direction === "bullish" ? level > entry : level < entry),
+  );
+  if (valid.length === 0) return null;
   return direction === "bullish"
-    ? Math.min(...levels)
-    : Math.max(...levels);
+    ? Math.min(...valid)
+    : Math.max(...valid);
 }
 
 function pipsFor(instrument: string, distance: number): number {
@@ -655,7 +787,9 @@ export function analysePriceAction(
   }
 
   const target = nearestOpposingLiquidity(
-    [h1, h4, d1],
+    [h1, h4],
+    d1,
+    m15,
     direction,
     input.price,
   );
@@ -690,13 +824,41 @@ export function analysePriceAction(
   const takeProfit2 = round(input.price + sign * risk * 3.5);
   const takeProfit = round(target);
   const tags = [
-    ...(sweep ? ["LIQUIDITY_SWEEP", "RECLAIM", "FMD_INVALIDATION"] : []),
+    ...(sweep
+      ? [
+          "LIQUIDITY_SWEEP",
+          "RECLAIM",
+          "FMD_INVALIDATION",
+          "LIQUIDITY_ENGINEERING",
+          "SHIFT_ENTRY",
+          ...(sweep.source === "EQUAL_LEVELS" ? ["EQUAL_HIGHS_OR_LOWS"] : []),
+          ...(sweep.source === "ASIAN_RANGE" ? ["ASIAN_SESSION_LIQUIDITY"] : []),
+        ]
+      : []),
     ...(shiftIndex !== null ? ["DISPLACEMENT", "MSS", "STRUCTURE_SHIFT"] : []),
     ...(zone.kind === "FVG" ? ["FVG", "AOL_RETEST"] : []),
     ...(zone.kind === "ORDER_BLOCK" ? ["ORDER_BLOCK", "MITIGATION_CHECK"] : []),
-    ...(zone.kind === "RETEST" ? ["PURE_PRICE_ACTION", "BREAK_RETEST"] : []),
+    ...(zone.kind === "BREAKER_BLOCK" ? ["BREAKER_BLOCK", "MITIGATION_CHECK"] : []),
+    ...(zone.kind === "RETEST"
+      ? ["PURE_PRICE_ACTION", "BREAK_RETEST", ...(breakRetest && breakRetest.touches >= 2 ? ["FLIP_TYPE_1"] : [])]
+      : []),
     ...(zone.fill < 0.5 ? ["FRESH_ZONE_UNDER_50_PERCENT_MITIGATION"] : []),
     ...(inCorrectHalf ? [direction === "bullish" ? "DISCOUNT" : "PREMIUM"] : []),
+    ...(direction === "bullish"
+      ? (rangeHigh - input.price) / Math.max(rangeHigh - rangeLow, Number.EPSILON) >= 0.62 &&
+        (rangeHigh - input.price) / Math.max(rangeHigh - rangeLow, Number.EPSILON) <= 0.79
+        ? ["OTE"]
+        : []
+      : (input.price - rangeLow) / Math.max(rangeHigh - rangeLow, Number.EPSILON) >= 0.62 &&
+        (input.price - rangeLow) / Math.max(rangeHigh - rangeLow, Number.EPSILON) <= 0.79
+        ? ["OTE"]
+        : []),
+    ...(findSwings(m15.slice(0, zone.createdIndex + 1)).some(
+      (swing) => Math.abs(swing.price - zone.mid) <= atr * 0.25,
+    )
+      ? ["AOL_CONFLUENCE"]
+      : []),
+    "FTA_TARGET",
     ...(m5.length >= 24 && analyseStructure(m5).direction === direction
       ? ["M5_REFINEMENT_AGREES"]
       : []),
