@@ -10,6 +10,7 @@ import {
 import Link from "next/link";
 import type {
   MarketCategory,
+  MarketCandle,
   MarketDataStatus,
   MarketInstrument,
   MarketQuote,
@@ -261,15 +262,6 @@ function formatPrice(value: number, instrument: MarketInstrument): string {
   }).format(value);
 }
 
-function formatTime(value: string): string {
-  const date = new Date(value);
-  if (!Number.isFinite(date.getTime())) return "Time unavailable";
-  return new Intl.DateTimeFormat(undefined, {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(date);
-}
-
 type WatchTab = "watchlist" | "all" | "metals" | "forex";
 
 const CURRENCY_FLAGS: Record<string, string> = {
@@ -359,7 +351,7 @@ export function MarketWatch({
   const [search, setSearch] = useState("");
   const [tab, setTab] = useState<WatchTab>(favoritesOnly ? "watchlist" : "watchlist");
   const [selectedSymbol, setSelectedSymbol] = useState("");
-  const [dailyHistory, setDailyHistory] = useState<Record<string, number[]>>({});
+  const [dailyHistory, setDailyHistory] = useState<Record<string, Pick<MarketCandle, "time" | "close">[]>>({});
 
   const quoteBySymbol = useMemo(
     () =>
@@ -414,7 +406,7 @@ export function MarketWatch({
           const values = candles
             .filter((candle) => Number.isFinite(candle.close) && candle.close > 0)
             .slice(-24)
-            .map((candle) => candle.close);
+            .map((candle) => ({ time: candle.time, close: candle.close }));
           return [instrument.symbol.toUpperCase(), values] as const;
         } catch {
           return [instrument.symbol.toUpperCase(), []] as const;
@@ -442,17 +434,16 @@ export function MarketWatch({
     if (typeof quote?.changePercent === "number" && Number.isFinite(quote.changePercent)) {
       return quote.changePercent;
     }
-    const values = dailyHistory[instrument.symbol.toUpperCase()];
-    if (!values || values.length < 2) return null;
-    const currentPrice = quote?.last ?? quote?.bid ?? quote?.ask ?? values[values.length - 1];
-    const closes = values;
+    const candles = dailyHistory[instrument.symbol.toUpperCase()];
+    if (!candles || candles.length < 2) return null;
+    const lastCandle = candles[candles.length - 1];
+    const lastDay = String(lastCandle.time).slice(0, 10);
     const today = new Date().toISOString().slice(0, 10);
-    const lastCandle = closes[closes.length - 1];
-    const previousClose = lastCandle > 0 ? closes[closes.length - 2] : lastCandle;
-    const sameDayCandle = currentRows.some(
-      (row) => row.symbol === instrument.symbol && row.category === instrument.category,
-    ) && today.length === 10;
-    const base = sameDayCandle ? previousClose : lastCandle;
+    const base =
+      lastDay === today
+        ? candles[candles.length - 2].close
+        : lastCandle.close;
+    const currentPrice = quote?.last ?? quote?.bid ?? quote?.ask ?? lastCandle.close;
     if (!Number.isFinite(currentPrice) || !Number.isFinite(base) || base <= 0) return null;
     return ((currentPrice - base) / base) * 100;
   }
@@ -541,7 +532,7 @@ export function MarketWatch({
         const symbol = instrument.symbol.toUpperCase();
         const quote = quoteBySymbol.get(symbol);
         const last = quote?.last ?? quote?.bid ?? quote?.ask;
-        const values = dailyHistory[symbol] ?? [];
+        const values = (dailyHistory[symbol] ?? []).map((candle) => candle.close);
         const change = changePercent(instrument);
         const rising = values.length >= 2
           ? values[values.length - 1] >= values[0]
