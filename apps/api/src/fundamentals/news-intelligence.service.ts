@@ -229,9 +229,12 @@ export class NewsIntelligenceService {
       const bias: NewsDirection = articleCount === 0 || Math.abs(score) < 12
         ? "neutral"
         : score > 0 ? "bullish" : "bearish";
-      const confidence = articleCount >= 8 && Math.abs(score) >= 30
+      const bothCurrenciesHaveEvidence = Boolean(
+        baseData?.articleIds.size && quoteData?.articleIds.size,
+      );
+      const confidence = bothCurrenciesHaveEvidence && articleCount >= 8 && Math.abs(score) >= 30
         ? "high"
-        : articleCount >= 3 ? "moderate" : "low";
+        : bothCurrenciesHaveEvidence && articleCount >= 3 ? "moderate" : "low";
       const summary = articleCount === 0
         ? "Insufficient directional headline evidence for either currency."
         : base + " evidence: " + (baseData?.articleIds.size ?? 0) +
