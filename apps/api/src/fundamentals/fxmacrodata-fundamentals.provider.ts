@@ -29,7 +29,7 @@ export class FxMacroDataFundamentalsProvider implements FundamentalsProvider {
   private readonly logger = new Logger(FxMacroDataFundamentalsProvider.name);
   private readonly apiKey = process.env.FXMACRODATA_API_KEY?.trim() || null;
   // The anonymous tier is limited to 100 data requests per day. Cache the two
-  // USD endpoints for 30 minutes so normal page refreshes do not burn quota.
+  // USD endpoints for 45 minutes so normal page refreshes do not burn quota.
   private readonly cacheMs = 45 * 60_000;
   private cache: CachedCalendar | null = null;
   private lastFetchError: string | null = null;
