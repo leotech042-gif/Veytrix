@@ -264,16 +264,16 @@ function formatPrice(value: number, instrument: MarketInstrument): string {
 
 type WatchTab = "watchlist" | "all" | "metals" | "forex";
 
-const CURRENCY_FLAGS: Record<string, string> = {
-  EUR: "🇪🇺",
-  USD: "🇺🇸",
-  GBP: "🇬🇧",
-  JPY: "🇯🇵",
-  AUD: "🇦🇺",
-  CAD: "🇨🇦",
-  CHF: "🇨🇭",
-  NZD: "🇳🇿",
-  CNY: "🇨🇳",
+const CURRENCY_COUNTRIES: Record<string, string> = {
+  EUR: "eu",
+  USD: "us",
+  GBP: "gb",
+  JPY: "jp",
+  AUD: "au",
+  CAD: "ca",
+  CHF: "ch",
+  NZD: "nz",
+  CNY: "cn",
 };
 
 function WatchAssetMark({
