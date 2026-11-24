@@ -34,7 +34,18 @@ interface EntryZone {
   fill: number;
 }
 
+export interface PriceActionAnnotation {
+  type: "level" | "zone";
+  label: string;
+  from: string;
+  to: string;
+  price?: number;
+  top?: number;
+  bottom?: number;
+}
+
 export interface PriceActionSetup {
+  annotations: PriceActionAnnotation[];
   entry: number;
   stopLoss: number;
   takeProfit: number;
@@ -1369,11 +1380,53 @@ export function analysePriceAction(
           ? ", then retested a failed block from the other side."
           : ", followed by a confirmed rejection.");
 
+  const lastM15Time = m15[m15.length - 1].time;
+  const annotations: PriceActionAnnotation[] = [
+    ...findSwings(m15).slice(-6).map((swing) => ({
+      type: "level" as const,
+      label: swing.kind === "high" ? "M15 swing high" : "M15 swing low",
+      from: m15[swing.index].time,
+      to: lastM15Time,
+      price: swing.price,
+    })),
+    ...(sweep ? [{
+      type: "level" as const,
+      label: direction === "bullish" ? "Sell-side liquidity sweep" : "Buy-side liquidity sweep",
+      from: m15[sweep.index].time,
+      to: lastM15Time,
+      price: sweep.level,
+    }] : []),
+    ...(shiftIndex !== null ? [{
+      type: "level" as const,
+      label: "Market structure shift",
+      from: m15[shiftIndex].time,
+      to: lastM15Time,
+      price: m15[shiftIndex].close,
+    }] : []),
+    {
+      type: "zone",
+      label: zone.kind.replaceAll("_", " "),
+      from: m15[Math.max(0, Math.min(zone.createdIndex, m15.length - 1))].time,
+      to: lastM15Time,
+      top: zone.top,
+      bottom: zone.bottom,
+    },
+    {
+      type: "zone",
+      label: direction === "bullish" ? "Discount" : "Premium",
+      from: dealingRange[0].time,
+      to: lastM15Time,
+      top: direction === "bullish" ? equilibrium : rangeHigh,
+      bottom: direction === "bullish" ? rangeLow : equilibrium,
+    },
+  ];
+
   return {
     direction,
     confidence,
     technicalExplanation: bias.explanation,
     setup: {
+      annotations,
       entry: round(input.price),
       stopLoss: round(stopLoss),
       takeProfit,
