@@ -4,59 +4,27 @@ import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "reac
 import type { ChartTimeframe, MarketInstrument } from "@veytrix/shared";
 import { usePreferences } from "./theme-provider";
 import { useMarketFavorites } from "./market-watch";
+import { VeytrixLoader } from "./veytrix-loader";
 
 const timeframes: ChartTimeframe[] = [
-  "M1",
-  "M5",
-  "M15",
-  "M30",
-  "H1",
-  "H4",
-  "D1",
-  "W1",
+  "M1", "M5", "M15", "M30", "H1", "H4", "D1", "W1",
 ];
 
 const tradingViewIntervals: Record<ChartTimeframe, string> = {
-  M1: "1",
-  M5: "5",
-  M15: "15",
-  M30: "30",
-  H1: "60",
-  H4: "240",
-  D1: "D",
-  W1: "W",
+  M1: "1", M5: "5", M15: "15", M30: "30", H1: "60", H4: "240", D1: "D", W1: "W",
 };
 
 const tradingViewAliases: Record<string, string> = {
-  AUS200: "TVC:AU200",
-  BTCUSD: "BINANCE:BTCUSDT",
-  ETHUSD: "BINANCE:ETHUSDT",
-  GER40: "FOREXCOM:GER40",
-  HK50: "TVC:HSI",
-  JP225: "FOREXCOM:JPN225",
-  UK100: "FOREXCOM:UKXGBP",
-  US100: "FOREXCOM:NSXUSD",
-  US30: "FOREXCOM:DJI",
-  US500: "FOREXCOM:SPXUSD",
-  XAGUSD: "OANDA:XAGUSD",
-  XAUUSD: "OANDA:XAUUSD",
-  XPDUSD: "OANDA:XPDUSD",
-  XPTUSD: "OANDA:XPTUSD",
+  AUS200: "TVC:AU200", BTCUSD: "BINANCE:BTCUSDT", ETHUSD: "BINANCE:ETHUSDT",
+  GER40: "FOREXCOM:GER40", HK50: "TVC:HSI", JP225: "FOREXCOM:JPN225",
+  UK100: "FOREXCOM:UKXGBP", US100: "FOREXCOM:NSXUSD", US30: "FOREXCOM:DJI",
+  US500: "FOREXCOM:SPXUSD", XAGUSD: "OANDA:XAGUSD", XAUUSD: "OANDA:XAUUSD",
+  XPDUSD: "OANDA:XPDUSD", XPTUSD: "OANDA:XPTUSD",
 };
 
 const PAIR_FLAGS: Record<string, string> = {
-  EUR: "🇪🇺",
-  GBP: "🇬🇧",
-  USD: "🇺🇸",
-  JPY: "🇯🇵",
-  AUD: "🇦🇺",
-  CAD: "🇨🇦",
-  CHF: "🇨🇭",
-  NZD: "🇳🇿",
-  XAU: "🥇",
-  XAG: "🥈",
-  BTC: "₿",
-  ETH: "Ξ",
+  EUR: "🇪🇺", GBP: "🇬🇧", USD: "🇺🇸", JPY: "🇯🇵", AUD: "🇦🇺", CAD: "🇨🇦",
+  CHF: "🇨🇭", NZD: "🇳🇿", XAU: "🥇", XAG: "🥈", BTC: "₿", ETH: "Ξ",
 };
 
 function pairFlags(symbol: string): string {
@@ -126,30 +94,22 @@ export function TradingChart({
 
   const list = useMemo(() => {
     const favSet = new Set(favorites.map((s) => s.toUpperCase()));
-    const fromFeed = instruments.filter((i) =>
-      favSet.has(i.symbol.toUpperCase()),
-    );
+    const fromFeed = instruments.filter((i) => favSet.has(i.symbol.toUpperCase()));
     if (fromFeed.length > 0) return fromFeed;
     const defaults = ["EURUSD", "GBPUSD", "USDJPY", "XAUUSD", "AUDUSD"];
     return defaults.map(
       (symbol) =>
         instruments.find((i) => i.symbol.toUpperCase() === symbol) ??
-        ({
-          symbol,
-          displayName: symbol,
-          category: "forex" as const,
-        } satisfies MarketInstrument),
+        ({ symbol, displayName: symbol, category: "forex" as const } satisfies MarketInstrument),
     );
   }, [instruments, favorites]);
 
   const [selectedInstrument, setSelectedInstrument] = useState("");
-  const [selectedTimeframe, setSelectedTimeframe] =
-    useState<ChartTimeframe>("M30");
+  const [selectedTimeframe, setSelectedTimeframe] = useState<ChartTimeframe>("M30");
   const [fullScreen, setFullScreen] = useState(false);
   const [reloadToken, setReloadToken] = useState(0);
   const [showFx, setShowFx] = useState(false);
-  const [widgetLoadResult, setWidgetLoadResult] =
-    useState<WidgetLoadResult | null>(null);
+  const [widgetLoadResult, setWidgetLoadResult] = useState<WidgetLoadResult | null>(null);
 
   const showSma = preferences.showSma ?? false;
   const showEma = preferences.showEma ?? false;
@@ -159,36 +119,23 @@ export function TradingChart({
     selectedInstrument || initialInstrument || list[0]?.symbol || "";
 
   const instrument =
-    list.find((i) => i.symbol.toUpperCase() === activeInstrument.toUpperCase()) ??
-    list[0];
+    list.find((i) => i.symbol.toUpperCase() === activeInstrument.toUpperCase()) ?? list[0];
 
   const symbol = toTradingViewSymbol(instrument);
   const timeframe = selectedTimeframe;
 
-  const chartBackground =
-    resolvedTheme === "light" ? "#ffffff" : "#0b0d10";
+  const chartBackground = resolvedTheme === "light" ? "#ffffff" : "#0b0d10";
   const gridColor =
-    resolvedTheme === "light"
-      ? "rgba(0,0,0,0.05)"
-      : "rgba(255,255,255,0.04)";
+    resolvedTheme === "light" ? "rgba(0,0,0,0.05)" : "rgba(255,255,255,0.04)";
 
   const widgetKey = JSON.stringify([
-    symbol,
-    timeframe,
-    showSma,
-    showEma,
-    showVolume,
-    resolvedTheme,
-    preferences.bullishColor,
-    preferences.bearishColor,
-    reloadToken,
+    symbol, timeframe, showSma, showEma, showVolume, resolvedTheme,
+    preferences.bullishColor, preferences.bearishColor, reloadToken,
   ]);
 
   const loading = Boolean(symbol) && widgetLoadResult?.key !== widgetKey;
   const error =
-    widgetLoadResult?.key === widgetKey
-      ? (widgetLoadResult.error ?? null)
-      : null;
+    widgetLoadResult?.key === widgetKey ? (widgetLoadResult.error ?? null) : null;
 
   useEffect(() => {
     const widget = widgetRef.current;
@@ -252,10 +199,7 @@ export function TradingChart({
     };
     script.onerror = () => {
       if (active) {
-        setWidgetLoadResult({
-          key: widgetKey,
-          error: "Chart could not load. Check network.",
-        });
+        setWidgetLoadResult({ key: widgetKey, error: "Chart could not load. Check network." });
       }
     };
     embedContainer.appendChild(script);
@@ -265,22 +209,12 @@ export function TradingChart({
       embedContainer.remove();
     };
   }, [
-    chartBackground,
-    gridColor,
-    preferences.bearishColor,
-    preferences.bullishColor,
-    showEma,
-    showSma,
-    showVolume,
-    symbol,
-    timeframe,
-    resolvedTheme,
-    widgetKey,
+    chartBackground, gridColor, preferences.bearishColor, preferences.bullishColor,
+    showEma, showSma, showVolume, symbol, timeframe, resolvedTheme, widgetKey,
   ]);
 
   useEffect(() => {
-    const sync = () =>
-      setFullScreen(document.fullscreenElement === panelRef.current);
+    const sync = () => setFullScreen(document.fullscreenElement === panelRef.current);
     document.addEventListener("fullscreenchange", sync);
     return () => document.removeEventListener("fullscreenchange", sync);
   }, []);
@@ -319,10 +253,7 @@ export function TradingChart({
             <span>{activeInstrument}</span>
           </div>
         </div>
-        <div
-          className="chart-float-tools"
-          title="Drawing tools are on the chart left toolbar"
-        >
+        <div className="chart-float-tools" title="Drawing tools are on the chart left toolbar">
           <span className="chart-float-ico">⋮⋮</span>
           <span className="chart-float-ico">—</span>
           <span className="chart-float-ico">ƒ</span>
@@ -339,11 +270,14 @@ export function TradingChart({
             style={{ width: "100%", height: "100%", minHeight: 420 }}
           />
         </div>
-        {(loading || error) && (
-          <div className="chart-overlay" role={error ? "alert" : "status"}>
-            <strong>{error ? error : "Loading chart…"}</strong>
+        {loading && !error ? (
+          <VeytrixLoader variant="inline" label="Loading chart…" />
+        ) : null}
+        {error ? (
+          <div className="chart-overlay" role="alert">
+            <strong>{error}</strong>
           </div>
-        )}
+        ) : null}
       </div>
 
       <div className="chart-bottom-bar">
@@ -355,15 +289,11 @@ export function TradingChart({
               role="listitem"
               className={
                 "chart-pair-pill" +
-                (item.symbol.toUpperCase() === activeInstrument.toUpperCase()
-                  ? " on"
-                  : "")
+                (item.symbol.toUpperCase() === activeInstrument.toUpperCase() ? " on" : "")
               }
               onClick={() => setSelectedInstrument(item.symbol)}
             >
-              <span className="chart-pair-pill-flags">
-                {pairFlags(item.symbol)}
-              </span>
+              <span className="chart-pair-pill-flags">{pairFlags(item.symbol)}</span>
               <span>{item.symbol}</span>
             </button>
           ))}
@@ -373,20 +303,12 @@ export function TradingChart({
           <select
             className="chart-tf-pill"
             value={timeframe}
-            onChange={(e) =>
-              setSelectedTimeframe(e.target.value as ChartTimeframe)
-            }
+            onChange={(e) => setSelectedTimeframe(e.target.value as ChartTimeframe)}
             aria-label="Timeframe"
           >
             {timeframes.map((tf) => (
               <option key={tf} value={tf}>
-                {tf === "M15"
-                  ? "15m"
-                  : tf === "M30"
-                    ? "30m"
-                    : tf === "H1"
-                      ? "1H"
-                      : tf}
+                {tf === "M15" ? "15m" : tf === "M30" ? "30m" : tf === "H1" ? "1H" : tf}
               </option>
             ))}
           </select>
@@ -443,15 +365,12 @@ export function TradingChart({
             <input
               type="checkbox"
               checked={showVolume}
-              onChange={(e) =>
-                updatePreferences({ showVolume: e.target.checked })
-              }
+              onChange={(e) => updatePreferences({ showVolume: e.target.checked })}
             />
             Volume
           </label>
           <p className="chart-tools-hint">
-            More indicators and all drawings are on the chart toolbars (left /
-            top).
+            More indicators and all drawings are on the chart toolbars (left / top).
           </p>
         </div>
       )}
