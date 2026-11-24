@@ -408,10 +408,10 @@ export function MarketWatch({
     if (missing.length === 0) return;
 
     void (async () => {
-      const entries: [
+      const entries: (readonly [
         string,
         Pick<MarketCandle, "time" | "close">[],
-      ][] = [];
+      ])[] = [];
 
       // Tiingo can rate-limit a burst of per-symbol history requests.
       // Fetch small batches so every visible market gets a fair chance.
@@ -475,8 +475,11 @@ export function MarketWatch({
     // On weekends/holidays the final available candle may already be complete.
     const lastCandle = candles[candles.length - 1];
     const lastStart = Date.parse(lastCandle.time);
+    const quoteTime = Date.parse(quote?.asOf ?? "");
     const lastIsComplete =
-      Number.isFinite(lastStart) && lastStart + 24 * 60 * 60_000 <= Date.now();
+      Number.isFinite(lastStart) &&
+      Number.isFinite(quoteTime) &&
+      lastStart + 24 * 60 * 60_000 <= quoteTime;
     const referenceCandle = lastIsComplete
       ? lastCandle
       : candles[candles.length - 2];
