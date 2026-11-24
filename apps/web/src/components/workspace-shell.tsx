@@ -15,7 +15,6 @@ import {
 const desktopNav = [
   { href: "/", label: "Home", icon: "home" },
   { href: "/signals", label: "Signals", icon: "signals" },
-  { href: "/backtesting", label: "Backtest", icon: "chart" },
   { href: "/charts", label: "Chart", icon: "chart" },
   { href: "/fundamentals", label: "News", icon: "news" },
   { href: "/settings", label: "Settings", icon: "settings" },
