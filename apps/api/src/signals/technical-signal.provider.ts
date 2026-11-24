@@ -1,4 +1,4 @@
-import { Inject, Injectable, Logger } from "@nestjs/common";
+import { Inject, Injectable, Logger, ServiceUnavailableException } from "@nestjs/common";
 import type {
   ChartTimeframe,
   EconomicEvent,
@@ -154,8 +154,14 @@ export class TechnicalSignalProvider implements SignalProvider {
         return b.confidence - a.confidence;
       });
     } catch (error) {
-      this.logger.error("Signal scan failed", error);
-      return [];
+      this.logger.error(
+        "Signal scan failed",
+        error instanceof Error ? error.stack : String(error),
+      );
+      throw new ServiceUnavailableException({
+        code: "SIGNAL_SCAN_FAILED",
+        message: "Veytrix could not complete the signal scan. Check the API logs and market-data connection, then retry.",
+      });
     }
   }
 
@@ -395,7 +401,11 @@ export class TechnicalSignalProvider implements SignalProvider {
     try {
       const candles = await this.marketData.getHistory(instrument, timeframe);
       return Array.isArray(candles) ? [...candles] : [];
-    } catch {
+    } catch (error) {
+      this.logger.warn(
+        `History unavailable for ${instrument} ${timeframe}`,
+        error instanceof Error ? error.message : String(error),
+      );
       return [];
     }
   }

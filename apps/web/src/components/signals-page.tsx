@@ -65,9 +65,11 @@ export function SignalsPage() {
   const [query, setQuery] = useState("");
   const [refreshing, setRefreshing] = useState(false);
   const [expandedBiasIds, setExpandedBiasIds] = useState<string[]>([]);
+  const [scanError, setScanError] = useState<string | null>(null);
 
   async function load() {
     setRefreshing(true);
+    setScanError(null);
     try {
       const st = await getSignalStatus();
       if (!isSignalStatus(st)) throw new Error("Invalid status");
@@ -84,8 +86,13 @@ export function SignalsPage() {
         return;
       }
       setSignals(sortSignals(raw));
-    } catch {
+    } catch (error) {
       setSignals([]);
+      setScanError(
+        error instanceof Error
+          ? error.message
+          : "Signal scan failed. Check that the Veytrix API is running.",
+      );
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -105,11 +112,18 @@ export function SignalsPage() {
       return;
     }
     setRefreshing(true);
+    setScanError(null);
     try {
       const raw = await getSignals({ instrument: s });
       if (Array.isArray(raw) && raw.every(isTradingSignal)) {
         setSignals(sortSignals(raw));
       }
+    } catch (error) {
+      setScanError(
+        error instanceof Error
+          ? error.message
+          : "The requested pair could not be analysed.",
+      );
     } finally {
       setRefreshing(false);
     }
@@ -161,11 +175,13 @@ export function SignalsPage() {
 
       {loading && <div className="home-empty">Loading…</div>}
 
-      {!loading && setups.length === 0 && biases.length === 0 && (
+      {scanError && <div className="home-empty">{scanError}</div>}
+
+      {!loading && !scanError && setups.length === 0 && biases.length === 0 && (
         <div className="home-empty">
           {status?.state === "connected"
-            ? "No setups right now"
-            : "Engine offline"}
+            ? "No valid setup or directional bias was returned. Check the pair scan and candle history."
+            : status?.message ?? "Engine offline"}
         </div>
       )}
 
@@ -305,6 +321,9 @@ export function SignalsPage() {
                   </span>
                   <span className={"chevron" + (expanded ? " expanded" : "")}>›</span>
                 </button>
+                <p className="sig-bias-note">
+                  {b.technicalExplanation || b.summary}
+                </p>
                 {expanded ? (
                   <div className="sig-bias-expanded" id={detailsId}>
                     <div>
