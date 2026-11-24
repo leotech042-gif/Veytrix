@@ -94,11 +94,11 @@ export class BacktestingService {
     const spread = quote?.spread && Number.isFinite(quote.spread) ? quote.spread : 0;
     const split = Math.max(40, Math.min(candles.length - 20, Math.floor(candles.length * 0.8)));
     const backtest = this.testSegment(
-      instrument, candles, [...h1Raw], [...h4Raw], [...d1Raw],
+      instrument, candles, [...m15Raw], [...h1Raw], [...h4Raw], [...d1Raw],
       40, split, spread,
     );
     const forward = this.testSegment(
-      instrument, candles, [...h1Raw], [...h4Raw], [...d1Raw],
+      instrument, candles, [...m15Raw], [...h1Raw], [...h4Raw], [...d1Raw],
       split, candles.length, spread,
     );
 
@@ -123,6 +123,7 @@ export class BacktestingService {
   private testSegment(
     instrument: string,
     candles: MarketCandle[],
+    m15History: MarketCandle[],
     h1: MarketCandle[],
     h4: MarketCandle[],
     d1: MarketCandle[],
@@ -143,7 +144,7 @@ export class BacktestingService {
         d1: d1.filter((c) => Date.parse(c.time) + TF_MS.D1 <= decisionTime),
         h4: h4.filter((c) => Date.parse(c.time) + TF_MS.H4 <= decisionTime),
         h1: h1.filter((c) => Date.parse(c.time) + TF_MS.H1 <= decisionTime),
-        m15: candles.slice(0, index + 1),
+        m15: m15History.filter((c) => Date.parse(c.time) + TF_MS.M15 <= decisionTime),
         m5: [],
         now: decisionTime,
       });
