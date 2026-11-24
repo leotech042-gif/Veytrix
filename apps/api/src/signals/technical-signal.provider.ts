@@ -1,4 +1,4 @@
-import { Inject, Injectable, Logger, ServiceUnavailableException } from "@nestjs/common";
+import { Inject, Injectable, Logger } from "@nestjs/common";
 import type {
   ChartTimeframe,
   EconomicEvent,
@@ -47,7 +47,8 @@ export class TechnicalSignalProvider implements SignalProvider {
       return {
         state: "unconfigured",
         provider: null,
-        message: "Signal analysis is unavailable until a live market-data provider is configured.",
+        message:
+          "Signal analysis is unavailable until a live market-data provider is configured.",
       };
     }
     if (status.state === "disconnected") {
@@ -72,23 +73,48 @@ export class TechnicalSignalProvider implements SignalProvider {
   async getSignals(query?: SignalQuery): Promise<readonly TradingSignal[]> {
     try {
       const marketStatus = await this.marketData.getStatus();
-      if (marketStatus.state !== "connected") return [];
+      if (marketStatus.state === "unconfigured") return [];
 
-      const quotes = (await this.marketData.getQuotes()) as MarketQuote[];
-      if (!quotes.length) return [];
+      let quotes: MarketQuote[] = [];
+      try {
+        quotes = [...((await this.marketData.getQuotes()) as MarketQuote[])];
+      } catch (error) {
+        this.logger.warn(
+          "Quotes unavailable for signal scan — falling back to candle history",
+          error instanceof Error ? error.message : String(error),
+        );
+      }
 
-      const instruments = this.marketData.getInstruments
-        ? ((await this.marketData.getInstruments()) as MarketInstrument[])
-        : [];
+      let instruments: MarketInstrument[] = [];
+      try {
+        if (this.marketData.getInstruments) {
+          instruments = [
+            ...((await this.marketData.getInstruments()) as MarketInstrument[]),
+          ];
+        }
+      } catch {
+        /* optional */
+      }
 
       const instrumentFilter = query?.instrument?.toUpperCase();
       const favorites = (query?.favorites ?? [])
         .map((symbol) => symbol.toUpperCase())
         .filter(Boolean);
 
+      const DEFAULT_PAIRS = [
+        "EURUSD",
+        "GBPUSD",
+        "USDJPY",
+        "XAUUSD",
+        "AUDUSD",
+        "USDCAD",
+        "XAGUSD",
+        "GBPJPY",
+      ];
+
       const symbols = instrumentFilter
         ? [instrumentFilter]
-        : favorites.slice(0, 8);
+        : (favorites.length > 0 ? favorites : DEFAULT_PAIRS).slice(0, 8);
       if (symbols.length === 0) return [];
 
       const now = Date.now();
@@ -101,20 +127,15 @@ export class TechnicalSignalProvider implements SignalProvider {
       const deep = Boolean(instrumentFilter);
 
       for (const symbol of symbols) {
-        const quote = quotes.find(
+        const quoteFromFeed = quotes.find(
           (item) => item.instrument.toUpperCase() === symbol,
         );
-        if (!quote || (quote.last === undefined && quote.bid === undefined)) {
-          continue;
-        }
 
         const cached = this.signalCache.get(symbol);
         const cacheStillValid =
           cached &&
           now - cached.at < this.signalCacheMs &&
-          cached.signal.marketOpen === marketOpen &&
-          !marketStatus.delayed &&
-          !quote.delayed;
+          cached.signal.marketOpen === marketOpen;
         if (cacheStillValid) {
           signals.push(cached.signal);
           continue;
@@ -126,14 +147,44 @@ export class TechnicalSignalProvider implements SignalProvider {
             symbol,
             displayName: symbol,
             category: "forex" as const,
-            pricePrecision: 5,
+            pricePrecision: symbol.includes("JPY") ? 3 : 5,
           } satisfies MarketInstrument);
+
+        let quote: MarketQuote =
+          quoteFromFeed ??
+          ({
+            instrument: symbol,
+            asOf: new Date().toISOString(),
+            delayed: true,
+          } as MarketQuote);
+
+        if (
+          quote.last === undefined &&
+          quote.bid === undefined &&
+          quote.ask === undefined
+        ) {
+          const h1 = await this.safeHistory(symbol, "H1");
+          const lastClose = h1.length ? h1[h1.length - 1].close : undefined;
+          if (lastClose === undefined || !Number.isFinite(lastClose)) {
+            this.logger.debug(`Skip ${symbol}: no quote and no H1 history`);
+            continue;
+          }
+          quote = {
+            instrument: symbol,
+            asOf: new Date().toISOString(),
+            last: lastClose,
+            delayed: true,
+          };
+        }
+
+        // Setups from candle confluence whenever the session is open
+        const allowSetups = marketOpen;
 
         const analysis = await this.analysePair(
           quote,
           instrument,
           marketOpen,
-          marketOpen && !marketStatus.delayed && !quote.delayed,
+          allowSetups,
           deep,
           events,
         );
@@ -144,7 +195,7 @@ export class TechnicalSignalProvider implements SignalProvider {
         }
 
         if (!instrumentFilter) {
-          await new Promise((resolve) => setTimeout(resolve, 150));
+          await new Promise((resolve) => setTimeout(resolve, 200));
         }
       }
 
@@ -158,10 +209,7 @@ export class TechnicalSignalProvider implements SignalProvider {
         "Signal scan failed",
         error instanceof Error ? error.stack : String(error),
       );
-      throw new ServiceUnavailableException({
-        code: "SIGNAL_SCAN_FAILED",
-        message: "Veytrix could not complete the signal scan. Check the API logs and market-data connection, then retry.",
-      });
+      return [];
     }
   }
 
@@ -311,8 +359,12 @@ export class TechnicalSignalProvider implements SignalProvider {
     const recent = pairEvents.filter(({ event, pair, timestamp }) => {
       const name = event.event.toLowerCase();
       const directionallyReadable =
-        /gross domestic product|\bgdp\b|nonfarm payroll|employment change|employment report|unemployment|jobless claims|initial claims|continuing claims|retail sales|industrial production|manufacturing pmi|services pmi|\bpmi\b|consumer confidence|trade balance|current account|durable goods|housing starts|business confidence|average hourly earnings/.test(name) &&
-        !/inflation|\bcpi\b|\bppi\b|\bpce\b|interest rate|rate decision|central bank|minutes|speech|press conference/.test(name);
+        /gross domestic product|\bgdp\b|nonfarm payroll|employment change|employment report|unemployment|jobless claims|initial claims|continuing claims|retail sales|industrial production|manufacturing pmi|services pmi|\bpmi\b|consumer confidence|trade balance|current account|durable goods|housing starts|business confidence|average hourly earnings/.test(
+          name,
+        ) &&
+        !/inflation|\bcpi\b|\bppi\b|\bpce\b|interest rate|rate decision|central bank|minutes|speech|press conference/.test(
+          name,
+        );
 
       return (
         timestamp <= now &&
@@ -342,11 +394,7 @@ export class TechnicalSignalProvider implements SignalProvider {
         return total + (item.pair.bias === "bullish" ? weight : -weight);
       }, 0);
       const direction =
-        score > 0
-          ? "bullish"
-          : score < 0
-            ? "bearish"
-            : "mixed";
+        score > 0 ? "bullish" : score < 0 ? "bearish" : "mixed";
       const names = recent
         .sort((a, b) => b.timestamp - a.timestamp)
         .slice(0, 2)
@@ -377,9 +425,7 @@ export class TechnicalSignalProvider implements SignalProvider {
         Math.round((upcoming.timestamp - now) / 60_000),
       );
       const timing =
-        minutes >= 60
-          ? Math.round(minutes / 60) + "h"
-          : minutes + "m";
+        minutes >= 60 ? Math.round(minutes / 60) + "h" : minutes + "m";
       macroRead +=
         " Upcoming high-impact " +
         upcoming.event.currency +
@@ -409,6 +455,4 @@ export class TechnicalSignalProvider implements SignalProvider {
       return [];
     }
   }
-
-
 }
