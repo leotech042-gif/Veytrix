@@ -264,28 +264,36 @@ function formatPrice(value: number, instrument: MarketInstrument): string {
 
 type WatchTab = "watchlist" | "all" | "metals" | "forex";
 
-const CURRENCY_FLAGS: Record<string, string> = {
-  EUR: "🇪🇺",
-  USD: "🇺🇸",
-  GBP: "🇬🇧",
-  JPY: "🇯🇵",
-  AUD: "🇦🇺",
-  CAD: "🇨🇦",
-  CHF: "🇨🇭",
-  NZD: "🇳🇿",
-  CNY: "🇨🇳",
-};
+const CURRENCY_CODES = new Set(["EUR", "USD", "GBP", "JPY", "AUD", "CAD", "CHF", "NZD", "CNY"]);
 
-function WatchAssetMark({
-  part,
-  symbol,
-}: {
-  part: string;
-  symbol: string;
-}) {
-  const flag = CURRENCY_FLAGS[part];
-  let label = flag ?? part.slice(0, 3);
+function CurrencyFlag({ code }: { code: string }) {
+  const common = { width: 36, height: 36, viewBox: "0 0 36 36", "aria-hidden": true as const };
+  switch (code) {
+    case "EUR":
+      return <svg {...common}><rect width="36" height="36" fill="#1746a2" /><g fill="#ffd84d"><circle cx="18" cy="6" r="1.5"/><circle cx="24" cy="8" r="1.5"/><circle cx="28" cy="14" r="1.5"/><circle cx="28" cy="22" r="1.5"/><circle cx="24" cy="28" r="1.5"/><circle cx="18" cy="30" r="1.5"/><circle cx="12" cy="28" r="1.5"/><circle cx="8" cy="22" r="1.5"/><circle cx="8" cy="14" r="1.5"/><circle cx="12" cy="8" r="1.5"/></g></svg>;
+    case "USD":
+      return <svg {...common}>{Array.from({length:7},(_,i)=><rect key={i} y={i*5.15} width="36" height="2.6" fill="#c83b4b"/>)}<rect width="16" height="19" fill="#244477"/><g fill="#fff"><circle cx="4" cy="4" r=".8"/><circle cx="9" cy="4" r=".8"/><circle cx="14" cy="4" r=".8"/><circle cx="6.5" cy="9" r=".8"/><circle cx="11.5" cy="9" r=".8"/><circle cx="4" cy="14" r=".8"/><circle cx="9" cy="14" r=".8"/><circle cx="14" cy="14" r=".8"/></g></svg>;
+    case "GBP":
+      return <svg {...common}><rect width="36" height="36" fill="#17366f"/><path d="M-4 0L36 40M40-4L0 36" stroke="#fff" strokeWidth="8"/><path d="M-4 0L36 40M40-4L0 36" stroke="#c83248" strokeWidth="3"/><path d="M18 0V36M0 18H36" stroke="#fff" strokeWidth="11"/><path d="M18 0V36M0 18H36" stroke="#c83248" strokeWidth="5"/></svg>;
+    case "JPY":
+      return <svg {...common}><rect width="36" height="36" fill="#fff"/><circle cx="18" cy="18" r="8.5" fill="#c9273c"/></svg>;
+    case "AUD":
+    case "NZD":
+      return <svg {...common}><rect width="36" height="36" fill="#153875"/><path d="M0 0L18 18M18 0L0 18" stroke="#fff" strokeWidth="6"/><path d="M0 0L18 18M18 0L0 18" stroke="#c83248" strokeWidth="2.5"/><path d="M9 0V18M0 9H18" stroke="#fff" strokeWidth="5"/><path d="M9 0V18M0 9H18" stroke="#c83248" strokeWidth="2"/><g fill="#fff"><circle cx="26" cy="9" r="1.5"/><circle cx="29" cy="19" r="1.4"/><circle cx="23" cy="27" r="1.4"/></g></svg>;
+    case "CAD":
+      return <svg {...common}><rect width="36" height="36" fill="#fff"/><path d="M0 0H10V36H0ZM26 0H36V36H26Z" fill="#d52b3f"/><path d="M18 8L20 13L24 11L22 17L26 19L20 21L21 28L18 25L15 28L16 21L10 19L14 17L12 11L16 13Z" fill="#d52b3f"/></svg>;
+    case "CHF":
+      return <svg {...common}><rect width="36" height="36" fill="#d52b3f"/><path d="M15 7H21V15H29V21H21V29H15V21H7V15H15Z" fill="#fff"/></svg>;
+    case "CNY":
+      return <svg {...common}><rect width="36" height="36" fill="#d52b3f"/><path d="M10 5L11.8 9L16 9.5L13 12.3L13.8 16.5L10 14.4L6.2 16.5L7 12.3L4 9.5L8.2 9Z" fill="#ffdf45"/></svg>;
+    default:
+      return <span className="watch-asset watch-asset--generic">{code.slice(0, 3)}</span>;
+  }
+}
+
+function WatchAssetMark({ part, symbol }: { part: string; symbol: string }) {
   let tone = "watch-asset--generic";
+  let label = part.slice(0, 3);
   if (part === "XAU") {
     label = "Au";
     tone = "watch-asset--gold";
@@ -298,18 +306,12 @@ function WatchAssetMark({
   } else if (part === "ETH") {
     label = "◆";
     tone = "watch-asset--ethereum";
-  } else if (flag) {
-    tone = "watch-asset--flag";
+  } else if (CURRENCY_CODES.has(part)) {
+    return <span className="watch-asset watch-asset--flag" role="img" aria-label={part}><CurrencyFlag code={part} /></span>;
   } else if (symbol.startsWith("US") && /[0-9]/.test(symbol)) {
-    label = "🇺🇸";
-    tone = "watch-asset--flag";
+    return <span className="watch-asset watch-asset--flag" role="img" aria-label="USD"><CurrencyFlag code="USD" /></span>;
   }
-
-  return (
-    <span className={"watch-asset " + tone} aria-label={part}>
-      {label}
-    </span>
-  );
+  return <span className={"watch-asset " + tone} aria-label={part}>{label}</span>;
 }
 
 function WatchPairMark({ instrument }: { instrument: MarketInstrument }) {
