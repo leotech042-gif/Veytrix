@@ -1,7 +1,6 @@
 /**
- * Pure Price Action + SMC combined post-processor.
- * Wraps analysePriceAction: explicit TP3, combined explanation tags.
- * Does not change market quotes.
+ * Pure PA + SMC post-processor. Flexible R:R, TP3, combined labels.
+ * Does not touch market quotes.
  */
 import type {
   PriceActionAnalysis,
@@ -43,10 +42,12 @@ export function analysePriceAction(
   if (risk <= 0) return result;
 
   const tp3 = setup.takeProfit3 ?? setup.takeProfit;
-  const tp1 = round(entry + sign * risk * 2);
-  const tp2 = round(entry + sign * risk * 3.5);
   const reward = Math.abs(tp3 - entry);
   const rr = reward / risk;
+  const r1 = Math.min(2, Math.max(1, rr * 0.4));
+  const r2 = Math.min(3.5, Math.max(r1 + 0.3, rr * 0.7));
+  const tp1 = setup.takeProfit1 ?? round(entry + sign * risk * r1);
+  const tp2 = setup.takeProfit2 ?? round(entry + sign * risk * r2);
 
   const tags = Array.from(
     new Set([...(setup.tags ?? []), "PURE_PA_SMC_COMBINED"]),
@@ -54,10 +55,7 @@ export function analysePriceAction(
 
   const explanation =
     setup.explanation +
-    " Combined pure PA + SMC: structure bias, liquidity sweep or break-retest, OB/FVG/breaker, premium/discount, rejection. TP1=2R TP2=3.5R TP3=opposing liquidity (min 1:5)." +
-    (rr >= 5
-      ? ""
-      : " Measured RR under 1:5 — only kept if core engine already gated.");
+    ` Combined pure PA + SMC. R:R 1:${(Math.round(rr * 10) / 10).toFixed(1)} (flexible — structure may offer more or less). TP1/TP2 partials, TP3 opposing liquidity.`;
 
   return {
     ...result,
@@ -66,8 +64,8 @@ export function analysePriceAction(
     setup: {
       ...setup,
       takeProfit: tp3,
-      takeProfit1: setup.takeProfit1 ?? tp1,
-      takeProfit2: setup.takeProfit2 ?? tp2,
+      takeProfit1: tp1,
+      takeProfit2: tp2,
       takeProfit3: tp3,
       riskReward: Math.round(rr * 10) / 10,
       riskPips: setup.riskPips ?? pipsFor(input.instrument, risk),
