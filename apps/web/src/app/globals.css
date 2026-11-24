@@ -237,14 +237,14 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outlin
 .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0); }
 
 
-/* Market watchlist — compact, flag-led quote layout */
+/* Market watchlist — follows the active Veytrix theme. */
 .watchlist-screen {
-  --watch-bg: #e9eef6;
-  --watch-row: #e9eef6;
-  --watch-border: #d4dce8;
-  --watch-text: #1d293b;
-  --watch-muted: #6b778b;
-  --watch-accent: #3159a5;
+  --watch-bg: var(--bg-elevated);
+  --watch-row: var(--surface);
+  --watch-border: var(--border-subtle);
+  --watch-text: var(--text);
+  --watch-muted: var(--muted);
+  --watch-accent: var(--accent);
   width: calc(100% + 32px);
   min-height: calc(100dvh - 76px);
   margin: -16px -16px -96px;
@@ -256,18 +256,18 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outlin
 .watchlist-top { padding: 0 16px 14px; }
 .watchlist-search {
   display: flex; align-items: center; gap: 12px; height: 58px;
-  padding: 0 16px; border: 1.5px solid #d1dae8; border-radius: 18px;
-  background: rgba(255,255,255,.12); color: #657287;
+  padding: 0 16px; border: 1px solid var(--border); border-radius: 18px;
+  background: var(--surface); color: var(--text-secondary);
 }
 .watchlist-search > span:first-child { font-size: 27px; line-height: 1; }
 .watchlist-search input {
   flex: 1; min-width: 0; height: 100%; padding: 0; border: 0; outline: 0;
-  color: var(--watch-text); background: transparent; font-size: 16px;
+  color: var(--text); background: transparent; font-size: 16px;
 }
-.watchlist-search input::placeholder { color: #748197; opacity: 1; }
+.watchlist-search input::placeholder { color: var(--muted); opacity: 1; }
 .watchlist-search button {
   width: 28px; height: 28px; border: 0; border-radius: 50%;
-  color: #657287; background: #dbe3ef; font-size: 19px; cursor: pointer;
+  color: var(--text-secondary); background: var(--surface-raised); font-size: 19px; cursor: pointer;
 }
 .watchlist-tabs {
   display: flex; gap: 8px; overflow-x: auto; scrollbar-width: none;
@@ -277,19 +277,19 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outlin
 .watchlist-tab {
   display: inline-flex; align-items: center; justify-content: center; gap: 7px;
   flex: 0 0 auto; min-height: 42px; padding: 0 14px;
-  border: 1.5px solid #d5dce7; border-radius: 999px;
-  color: #667287; background: transparent; font-size: 13px; font-weight: 650;
+  border: 1px solid var(--border); border-radius: 999px;
+  color: var(--text-secondary); background: var(--surface); font-size: 13px; font-weight: 650;
   white-space: nowrap; cursor: pointer;
 }
 .watchlist-tab span { font-variant-numeric: tabular-nums; font-weight: 700; }
 .watchlist-tab.active {
-  color: #294d8d; border-color: #91a9d6; background: #dce6f6;
-  box-shadow: inset 0 0 0 1px rgba(71,111,177,.12);
+  color: var(--accent); border-color: var(--accent-dim); background: color-mix(in srgb, var(--accent) 12%, var(--surface));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 10%, transparent);
 }
 .watchlist-columns {
   display: flex; align-items: center; justify-content: space-between;
   min-height: 42px; padding: 0 18px; border-top: 1px solid var(--watch-border);
-  border-bottom: 1px solid var(--watch-border); color: #657287;
+  border-bottom: 1px solid var(--watch-border); color: var(--text-secondary);
   font-size: 10px; font-weight: 800; letter-spacing: 1px;
 }
 .watchlist-row {
@@ -298,10 +298,10 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outlin
   align-items: center; gap: 8px; min-height: 88px; padding: 12px 12px;
   border-bottom: 1px solid var(--watch-border); background: var(--watch-row);
 }
-.watchlist-row.selected { background: #dbe5f5; }
+.watchlist-row.selected { background: var(--surface-hover); }
 .watchlist-row.selected::before {
-  position: absolute; top: 18px; bottom: 18px; left: 0; width: 4px;
-  border-radius: 0 5px 5px 0; background: #426fc1; content: "";
+  position: absolute; top: 18px; bottom: 18px; left: 0; width: 3px;
+  border-radius: 0 5px 5px 0; background: var(--accent); content: "";
 }
 .watchlist-instrument {
   display: flex; align-items: center; min-width: 0; gap: 10px;
@@ -310,11 +310,12 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outlin
 .watch-pair-mark { display: flex; align-items: center; flex: 0 0 74px; min-width: 0; }
 .watch-asset {
   display: grid; place-items: center; flex: 0 0 35px; width: 35px; height: 35px;
-  border: 2px solid #f4f6fa; border-radius: 50%; overflow: hidden;
-  box-shadow: 0 1px 2px rgba(24,40,66,.13); font-size: 21px; line-height: 1;
+  border: 2px solid var(--surface); border-radius: 50%; overflow: hidden;
+  box-shadow: 0 1px 3px rgba(0,0,0,.25); font-size: 12px; line-height: 1;
 }
+.watch-asset img { display: block; width: 100%; height: 100%; object-fit: cover; }
 .watch-asset + .watch-asset { margin-left: -9px; }
-.watch-asset--flag { background: #fff; }
+.watch-asset--flag { background: var(--surface-raised); }
 .watch-asset--gold {
   color: #8a5b00; border-color: #f5e8bd;
   background: radial-gradient(circle at 35% 30%,#fff4bd,#dca93b 65%,#98651b);
@@ -325,64 +326,56 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outlin
   background: radial-gradient(circle at 35% 30%,#fff,#b9c3cf 68%,#7e8997);
   font-size: 12px; font-weight: 850;
 }
-.watch-asset--bitcoin {
-  color: #fff; border-color: #f5d5a7; background: #f7931a; font-size: 22px;
-}
-.watch-asset--ethereum {
-  color: #fff; border-color: #d8d8f0; background: #6977c9; font-size: 17px;
-}
+.watch-asset--bitcoin { color: #fff; border-color: #f5d5a7; background: #f7931a; font-size: 22px; }
+.watch-asset--ethereum { color: #fff; border-color: #d8d8f0; background: #6977c9; font-size: 17px; }
 .watch-asset--generic {
-  color: #fff; border-color: #d9e1ec; background: #64748b;
-  font-size: 10px; font-weight: 800;
+  color: var(--text); border-color: var(--border);
+  background: var(--surface-raised); font-size: 10px; font-weight: 800;
 }
-.watchlist-instrument-copy {
-  display: flex; flex-direction: column; gap: 3px; min-width: 0;
-}
+.watchlist-instrument-copy { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
 .watchlist-instrument-copy strong {
-  overflow: hidden; color: #1f2b3d; font-size: 15px; font-weight: 750;
+  overflow: hidden; color: var(--text); font-size: 15px; font-weight: 750;
   text-overflow: ellipsis; white-space: nowrap;
 }
 .watchlist-instrument-copy > span {
-  overflow: hidden; color: #6f7b8e; font-size: 12px;
+  overflow: hidden; color: var(--text-secondary); font-size: 12px;
   text-overflow: ellipsis; white-space: nowrap;
 }
 .watchlist-spark { width: 58px; height: 30px; }
 .watchlist-spark svg { display: block; width: 100%; height: 100%; overflow: visible; }
-.watchlist-spark path {
-  fill: none; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round;
-}
-.watchlist-spark path.up { stroke: #18866f; }
-.watchlist-spark path.down { stroke: #ce5b70; }
-.watchlist-spark-empty { display: block; padding-top: 7px; color: #9aa5b5; text-align: center; }
+.watchlist-spark path { fill: none; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
+.watchlist-spark path.up { stroke: var(--success); }
+.watchlist-spark path.down { stroke: var(--danger); }
+.watchlist-spark-empty { display: block; padding-top: 7px; color: var(--muted); text-align: center; }
 .watchlist-price {
   display: flex; flex-direction: column; align-items: flex-end; gap: 5px;
   min-width: 0; font-variant-numeric: tabular-nums;
 }
 .watchlist-price > strong {
-  max-width: 100%; overflow: hidden; color: #202b3d; font-size: 15px;
+  max-width: 100%; overflow: hidden; color: var(--text); font-size: 15px;
   font-weight: 750; text-overflow: ellipsis; white-space: nowrap;
 }
 .watchlist-change {
   min-width: 60px; padding: 3px 7px; border-radius: 7px;
-  color: #718094; background: #dce3ec; text-align: center;
+  color: var(--text-secondary); background: var(--surface-raised); text-align: center;
   font-size: 11px; font-weight: 750;
 }
-.watchlist-change.positive { color: #16836f; background: #cfe4e1; }
-.watchlist-change.negative { color: #b94f64; background: #f0d9df; }
+.watchlist-change.positive { color: var(--success); background: color-mix(in srgb, var(--success) 14%, var(--surface)); }
+.watchlist-change.negative { color: var(--danger); background: color-mix(in srgb, var(--danger) 14%, var(--surface)); }
 .watchlist-favorite {
   display: grid; place-items: center; width: 28px; height: 34px; padding: 0;
-  border: 0; color: #d9a83d; background: transparent; cursor: pointer;
+  border: 0; color: var(--muted); background: transparent; cursor: pointer;
   font-size: 25px; line-height: 1;
 }
-.watchlist-favorite.active { color: #dfa931; }
+.watchlist-favorite.active { color: var(--warning); }
 .watchlist-empty {
   display: flex; flex-direction: column; align-items: flex-start; gap: 8px;
-  margin: 16px; padding: 18px; border: 1px solid #d4dce8; border-radius: 14px;
-  color: #637087; background: rgba(255,255,255,.24); font-size: 13px;
+  margin: 16px; padding: 18px; border: 1px solid var(--border); border-radius: 14px;
+  color: var(--text-secondary); background: var(--surface); font-size: 13px;
 }
-.watchlist-empty strong { color: #26344a; font-size: 14px; }
-.watchlist-empty a { color: #3159a5; font-weight: 700; text-decoration: none; }
-.watchlist-data-note { margin: 12px 16px 0; color: #758196; font-size: 10px; }
+.watchlist-empty strong { color: var(--text); font-size: 14px; }
+.watchlist-empty a { color: var(--accent); font-weight: 700; text-decoration: none; }
+.watchlist-data-note { margin: 12px 16px 0; color: var(--muted); font-size: 10px; }
 .watchlist-footer { display: none; }
 @media (min-width: 900px) {
   .watchlist-screen { width: 100%; margin: 0; border: 1px solid var(--watch-border); border-radius: 16px; }
@@ -390,7 +383,6 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outlin
   .watchlist-row { grid-template-columns: minmax(220px,1fr) 90px minmax(110px,.5fr) 36px; padding-right: 20px; padding-left: 20px; }
   .watchlist-columns { padding-right: 24px; padding-left: 24px; }
 }
-
 /* Bias row keeps its original compact shape; the chevron now discloses detail inline. */
 .sig-bias-item { margin-bottom: 8px; }
 .sig-bias-row {
