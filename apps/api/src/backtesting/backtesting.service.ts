@@ -22,6 +22,7 @@ type TestTrade = {
   realizedR: number | null;
   outcome: Outcome;
   tags: string[];
+  annotations: import("../signals/price-action-engine").PriceActionAnnotation[];
   explanation: string;
   entryIndex: number;
   exitIndex: number | null;
@@ -136,10 +137,9 @@ export class BacktestingService {
     while (index < end - 1) {
       const current = candles[index];
       const decisionTime = Date.parse(current.time) + TF_MS.M15;
-      const price = current.close;
       const analysis = analysePriceAction({
         instrument,
-        price,
+        price: current.close,
         spread,
         d1: d1.filter((c) => Date.parse(c.time) + TF_MS.D1 <= decisionTime),
         h4: h4.filter((c) => Date.parse(c.time) + TF_MS.H4 <= decisionTime),
@@ -154,16 +154,33 @@ export class BacktestingService {
         continue;
       }
 
+      // Signal is confirmed at candle close; execute at the next candle open.
+      const entryBarIndex = index + 1;
+      const entryBar = candles[entryBarIndex];
+      const halfSpread = Math.max(0, spread) / 2;
       const direction = analysis.direction;
+      const entry = entryBar.open + (direction === "bullish" ? halfSpread : -halfSpread);
+      const risk = direction === "bullish" ? entry - setup.stopLoss : setup.stopLoss - entry;
+      const reward = direction === "bullish" ? setup.takeProfit - entry : entry - setup.takeProfit;
+      const actualRiskReward = risk > 0 && reward > 0 ? reward / risk : 0;
+
+      // Reject a gap that invalidates the setup or reduces executable R:R below 1:5.
+      if (risk <= 0 || reward <= 0 || actualRiskReward < 5) {
+        index += 1;
+        continue;
+      }
+
       let exitIndex: number | null = null;
       let outcome: Outcome = "open";
       let realizedR: number | null = null;
-      for (let future = index + 1; future < end; future += 1) {
+      for (let future = entryBarIndex; future < end; future += 1) {
         const bar = candles[future];
         const stopHit = direction === "bullish"
-          ? bar.low <= setup.stopLoss : bar.high >= setup.stopLoss;
+          ? bar.low - halfSpread <= setup.stopLoss
+          : bar.high + halfSpread >= setup.stopLoss;
         const targetHit = direction === "bullish"
-          ? bar.high >= setup.takeProfit : bar.low <= setup.takeProfit;
+          ? bar.high - halfSpread >= setup.takeProfit
+          : bar.low + halfSpread <= setup.takeProfit;
         if (stopHit) {
           exitIndex = future;
           outcome = "loss";
@@ -173,25 +190,27 @@ export class BacktestingService {
         if (targetHit) {
           exitIndex = future;
           outcome = "win";
-          realizedR = setup.riskReward;
+          realizedR = Number(actualRiskReward.toFixed(2));
           break;
         }
       }
+
       trades.push({
         id: instrument + "-" + index,
         direction,
         timeframe: setup.timeframe,
-        entryTime: current.time,
+        entryTime: entryBar.time,
         exitTime: exitIndex === null ? null : candles[exitIndex].time,
-        entry: setup.entry,
+        entry,
         stopLoss: setup.stopLoss,
         takeProfit: setup.takeProfit,
-        riskReward: setup.riskReward,
+        riskReward: Number(actualRiskReward.toFixed(2)),
         realizedR,
         outcome,
         tags: setup.tags,
+        annotations: setup.annotations,
         explanation: setup.explanation,
-        entryIndex: index,
+        entryIndex: entryBarIndex,
         exitIndex,
       });
       index = exitIndex === null ? end : exitIndex + 1;
