@@ -6,6 +6,7 @@ import { AuthGate } from "@/components/auth-gate";
 import "./globals.css";
 import "./theme-black-gold.css";
 import "./news-ui.css";
+import "./chart-ui.css";
 
 export const metadata: Metadata = {
   title: {
