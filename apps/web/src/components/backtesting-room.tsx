@@ -9,7 +9,7 @@ type Trade = {
   id:string; direction:"bullish"|"bearish"; timeframe:string; entryTime:string;
   exitTime:string|null; entry:number; stopLoss:number; takeProfit:number;
   riskReward:number; realizedR:number|null; outcome:"win"|"loss"|"open";
-  tags:string[]; explanation:string; entryIndex:number; exitIndex:number|null;
+  tags:string[]; annotations:{type:"level"|"zone";label:string;from:string;to:string;price?:number;top?:number;bottom?:number}[]; explanation:string; entryIndex:number; exitIndex:number|null;
 };
 type Summary = {trades:number;wins:number;losses:number;open:number;winRate:number;netR:number;averageR:number;maxDrawdownR:number};
 type Segment = {trades:Trade[];summary:Summary};
@@ -33,6 +33,21 @@ function CandleChart({candles,trade}:{candles:MarketCandle[];trade:Trade|null}){
  const level=(price:number,label:string,color:string)=><g key={label}><line x1="0" x2={width} y1={chart.y(price)} y2={chart.y(price)} stroke={color} strokeDasharray="7 5"/><text x="8" y={Math.max(14,chart.y(price)-5)} fill={color} fontSize="12">{label+" "+price}</text></g>;
  return <div className="bt-chart-wrap"><svg className="bt-chart" viewBox={"0 0 "+width+" "+height} role="img" aria-label="Historical candles and selected strategy setup">
   {[0,1,2,3,4].map(n=><line key={n} x1="0" x2={width} y1={height*n/4} y2={height*n/4} className="bt-gridline"/>)}
+  {trade?.annotations.map((a,i)=>{
+    const fromIndex=Math.max(0,candles.findIndex(c=>Date.parse(c.time)>=Date.parse(a.from)));
+    const foundTo=candles.findIndex(c=>Date.parse(c.time)>=Date.parse(a.to));
+    const toIndex=foundTo<0?candles.length-1:foundTo;
+    const x=fromIndex*chart.step;
+    const w=Math.max(chart.step,(toIndex-fromIndex+1)*chart.step);
+    if(a.type==="zone"&&a.top!==undefined&&a.bottom!==undefined){
+      const y=chart.y(a.top),bottom=chart.y(a.bottom);
+      return <g key={a.label+"-"+i}><rect x={x} y={Math.min(y,bottom)} width={w} height={Math.max(1,Math.abs(bottom-y))} fill="#a7ff4f" opacity=".10" stroke="#a7ff4f" strokeDasharray="4 3"/><text x={x+4} y={Math.min(y,bottom)+13} fill="#a7ff4f" fontSize="10">{a.label}</text></g>;
+    }
+    if(a.type==="level"&&a.price!==undefined){
+      return <g key={a.label+"-"+i}><line x1={x} x2={x+w} y1={chart.y(a.price)} y2={chart.y(a.price)} stroke="#e0b45c" strokeDasharray="3 4" opacity=".8"/><text x={x+4} y={Math.max(12,chart.y(a.price)-4)} fill="#e0b45c" fontSize="9">{a.label}</text></g>;
+    }
+    return null;
+  })}
   {candles.map((c,i)=>{const x=i*chart.step+chart.step/2,up=c.close>=c.open,color=up?"#26a69a":"#ef5350",top=chart.y(Math.max(c.open,c.close)),bottom=chart.y(Math.min(c.open,c.close)),w=Math.max(1,Math.min(7,chart.step*.62));return <g key={c.time}><line x1={x} x2={x} y1={chart.y(c.high)} y2={chart.y(c.low)} stroke={color}/><rect x={x-w/2} y={top} width={w} height={Math.max(1,bottom-top)} fill={color}/>{trade&&i===trade.entryIndex&&<circle cx={x} cy={chart.y(c.close)} r="5" fill="#a7ff4f" stroke="#101820" strokeWidth="2"/>}</g>})}
   {trade&&<>{level(trade.entry,"ENTRY","#a7ff4f")}{level(trade.stopLoss,"SL","#ef5350")}{level(trade.takeProfit,"TP","#26a69a")}</>}
  </svg><div className="bt-chart-axis"><span>{new Date(candles[0].time).toLocaleString()}</span><span>{new Date(candles[candles.length-1].time).toLocaleString()}</span></div></div>;
