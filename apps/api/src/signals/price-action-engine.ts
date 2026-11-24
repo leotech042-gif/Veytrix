@@ -825,21 +825,22 @@ function hasWickOverlap(
   return lowerOverlap > 0 || upperOverlap > 0;
 }
 
-function hasFlipType2(
+function findFlipType2(
   h4: MarketCandle[],
   d1: MarketCandle[],
   direction: Direction,
-): boolean {
-  const atr = averageRange(h4.slice(-14));
+): FlipLevel | null {
+  const atr = averageTrueRange(h4.slice(-14));
   const flip = findFlipLevel(h4, direction, atr, false, 0);
-  if (!flip || d1.length < 2) return false;
+  if (!flip || d1.length < 2) return null;
   const breakoutTime = Date.parse(flip.breakoutTime);
-  return d1.some(
+  const confirmed = d1.some(
     (candle) =>
       Date.parse(candle.time) >=
         breakoutTime + TIMEFRAME_MS.H4 &&
       hasWickOverlap(candle, flip.bandBottom, flip.bandTop),
   );
+  return confirmed ? flip : null;
 }
 
 function findRecentStructureShiftIndex(
@@ -1112,6 +1113,22 @@ export function analysePriceAction(
     };
   }
 
+  const h4Atr = averageTrueRange(h4.slice(-14));
+  const h1Atr = averageTrueRange(h1.slice(-14));
+  const h4Engineering = findSweep(h4, direction, h4Atr);
+  const h1Engineering = findSweep(h1, direction, h1Atr);
+  const h4ShiftIndex = findRecentStructureShiftIndex(h4, direction);
+  const h1ShiftIndex = findRecentStructureShiftIndex(h1, direction);
+  const h4Aol =
+    h4ShiftIndex === null
+      ? null
+      : findFreshZones(h4, direction, h4ShiftIndex, input.price, h4Atr)[0] ?? null;
+  const flipType1 = findFlipLevel(h4, direction, h4Atr, true, input.price);
+  const flipType2 = findFlipType2(h4, d1, direction);
+  const ftaShiftConfirmed =
+    h1ShiftIndex !== null &&
+    h4Structure.direction === direction;
+
   const sweep = findSweep(m15, direction, atr);
   const shiftIndex = sweep
     ? findPostSweepShift(m15, sweep, direction)
@@ -1119,7 +1136,26 @@ export function analysePriceAction(
   const breakRetest = sweep
     ? null
     : findBreakRetest(m15, direction, atr);
-  const triggerIndex = shiftIndex ?? breakRetest?.index ?? null;
+  const lastM15 = m15[m15.length - 1];
+  const previousM15 = m15[m15.length - 2];
+  const confirmsFlipRetest = (flip: FlipLevel | null) =>
+    Boolean(
+      flip &&
+      input.price >= flip.bandBottom &&
+      input.price <= flip.bandTop &&
+      isRejectionCandle(lastM15, direction, previousM15) &&
+      (direction === "bullish"
+        ? lastM15.low <= flip.bandTop
+        : lastM15.high >= flip.bandBottom),
+    );
+  const flipType1Entry = confirmsFlipRetest(flipType1);
+  const flipType2Entry = confirmsFlipRetest(flipType2);
+  const apaShiftEntry = Boolean(sweep && shiftIndex !== null && h4Aol);
+  const ftaEntry = Boolean(shiftIndex !== null && ftaShiftConfirmed);
+  const triggerIndex =
+    shiftIndex ??
+    breakRetest?.index ??
+    (flipType1Entry || flipType2Entry ? m15.length - 1 : null);
 
   if (triggerIndex === null) {
     return {
@@ -1138,17 +1174,34 @@ export function analysePriceAction(
     input.price,
     atr,
   );
+  const flipZone =
+    flipType1Entry && flipType1
+      ? flipType1
+      : flipType2Entry && flipType2
+        ? flipType2
+        : null;
   const zone = zones[0] ??
-    (breakRetest
-      ? {
-          top: breakRetest.level + atr * 0.06,
-          bottom: breakRetest.level - atr * 0.06,
-          mid: breakRetest.level,
-          kind: "RETEST" as const,
-          createdIndex: breakRetest.index,
-          fill: 0,
-        }
-      : null);
+    (apaShiftEntry && h4Aol
+      ? h4Aol
+      : flipZone
+        ? {
+            top: flipZone.bandTop,
+            bottom: flipZone.bandBottom,
+            mid: flipZone.level,
+            kind: "RETEST" as const,
+            createdIndex: m15.length - 1,
+            fill: 0,
+          }
+        : breakRetest
+          ? {
+              top: breakRetest.level + atr * 0.06,
+              bottom: breakRetest.level - atr * 0.06,
+              mid: breakRetest.level,
+              kind: "RETEST" as const,
+              createdIndex: breakRetest.index,
+              fill: 0,
+            }
+          : null);
 
   if (!zone || !isRejectionCandle(m15[m15.length - 1], direction, m15[m15.length - 2])) {
     return {
@@ -1233,21 +1286,6 @@ export function analysePriceAction(
   const takeProfit1 = round(input.price + sign * risk * 2);
   const takeProfit2 = round(input.price + sign * risk * 3.5);
   const takeProfit = round(target);
-  const h4Atr = averageTrueRange(h4.slice(-14));
-  const h1Atr = averageTrueRange(h1.slice(-14));
-  const h4Engineering = findSweep(h4, direction, h4Atr);
-  const h1Engineering = findSweep(h1, direction, h1Atr);
-  const h4ShiftIndex = findRecentStructureShiftIndex(h4, direction);
-  const h1ShiftIndex = findRecentStructureShiftIndex(h1, direction);
-  const h4Aol =
-    h4ShiftIndex === null
-      ? null
-      : findFreshZones(h4, direction, h4ShiftIndex, input.price, h4Atr)[0] ?? null;
-  const flipType1 = findFlipLevel(h4, direction, h4Atr, true, input.price);
-  const flipType2 = hasFlipType2(h4, d1, direction);
-  const ftaShiftConfirmed =
-    h1ShiftIndex !== null &&
-    h4Structure.direction === direction;
   const tags = [
     ...(sweep
       ? [
@@ -1279,10 +1317,10 @@ export function analysePriceAction(
     ...(zone.kind === "ORDER_BLOCK" ? ["ORDER_BLOCK", "MITIGATION_CHECK"] : []),
     ...(zone.kind === "BREAKER_BLOCK" ? ["BREAKER_BLOCK", "MITIGATION_CHECK"] : []),
     ...(zone.kind === "RETEST" ? ["PURE_PRICE_ACTION", "BREAK_RETEST"] : []),
-    ...(flipType1 ? ["APA_FLIP_TYPE_1"] : []),
-    ...(flipType2 ? ["APA_FLIP_TYPE_2_WICK_OVERLAP"] : []),
-    ...(ftaShiftConfirmed ? ["APA_FTA_ENTRY_CONFIRMED"] : []),
-    ...(sweep && shiftIndex !== null && h4Aol ? ["APA_SHIFT_ENTRY_HTF_AOL"] : []),
+    ...(flipType1Entry ? ["APA_FLIP_TYPE_1"] : []),
+    ...(flipType2Entry ? ["APA_FLIP_TYPE_2_WICK_OVERLAP"] : []),
+    ...(ftaEntry ? ["APA_FTA_ENTRY_CONFIRMED"] : []),
+    ...(apaShiftEntry ? ["APA_SHIFT_ENTRY_HTF_AOL"] : []),
     ...(h4Aol ? ["CONSTANT_TIMEFRAME_AOL_TOUCHED"] : []),
     ...(zone.fill < 0.5 ? ["FRESH_ZONE_UNDER_50_PERCENT_MITIGATION"] : []),
     ...(inCorrectHalf ? [direction === "bullish" ? "DISCOUNT" : "PREMIUM"] : []),
