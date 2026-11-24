@@ -407,27 +407,54 @@ export function MarketWatch({
       .filter((instrument) => !dailyHistory[instrument.symbol.toUpperCase()]);
     if (missing.length === 0) return;
 
-    void Promise.all(
-      missing.map(async (instrument) => {
-        try {
-          const candles = await getMarketHistory(instrument.symbol, "D1");
-          const values = candles
-            .filter((candle) => Number.isFinite(candle.close) && candle.close > 0)
-            .slice(-24)
-            .map((candle) => ({ time: candle.time, close: candle.close }));
-          return [instrument.symbol.toUpperCase(), values] as const;
-        } catch {
-          return [instrument.symbol.toUpperCase(), [] as Pick<MarketCandle, "time" | "close">[]] as const;
+    void (async () => {
+      const entries: [
+        string,
+        Pick<MarketCandle, "time" | "close">[],
+      ][] = [];
+
+      // Tiingo can rate-limit a burst of per-symbol history requests.
+      // Fetch small batches so every visible market gets a fair chance.
+      for (let index = 0; index < missing.length; index += 3) {
+        if (!active) return;
+        const batch = missing.slice(index, index + 3);
+        const batchEntries = await Promise.all(
+          batch.map(async (instrument) => {
+            try {
+              const candles = await getMarketHistory(instrument.symbol, "D1");
+              const values = candles
+                .filter(
+                  (candle) =>
+                    Number.isFinite(candle.close) && candle.close > 0,
+                )
+                .slice(-24)
+                .map((candle) => ({
+                  time: candle.time,
+                  close: candle.close,
+                }));
+              return [instrument.symbol.toUpperCase(), values] as const;
+            } catch {
+              return [
+                instrument.symbol.toUpperCase(),
+                [] as Pick<MarketCandle, "time" | "close">[],
+              ] as const;
+            }
+          }),
+        );
+        entries.push(...batchEntries);
+
+        if (index + 3 < missing.length) {
+          await new Promise((resolve) => window.setTimeout(resolve, 350));
         }
-      }),
-    ).then((entries) => {
+      }
+
       if (!active) return;
       setDailyHistory((current) => {
         const next = { ...current };
         for (const [symbol, values] of entries) next[symbol] = values;
         return next;
       });
-    });
+    })();
 
     return () => {
       active = false;
