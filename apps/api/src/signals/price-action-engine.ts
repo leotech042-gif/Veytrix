@@ -151,6 +151,39 @@ function analyseStructure(candles: MarketCandle[]): Structure {
   return { direction: "neutral", highs, lows };
 }
 
+function findDealingRange(
+  candles: MarketCandle[],
+  direction: Direction,
+): { high: number; low: number } | null {
+  const swings = findSwings(candles);
+  if (swings.length < 2) return null;
+
+  // Use the latest completed directional swing leg, not an arbitrary
+  // fixed number of lower-timeframe candles.
+  for (let index = swings.length - 1; index >= 0; index -= 1) {
+    const latest = swings[index];
+    if (direction === "bearish" && latest.kind === "low") {
+      const priorHigh = [...swings.slice(0, index)]
+        .reverse()
+        .find((swing) => swing.kind === "high");
+      if (priorHigh && priorHigh.price > latest.price) {
+        return { high: priorHigh.price, low: latest.price };
+      }
+    }
+
+    if (direction === "bullish" && latest.kind === "high") {
+      const priorLow = [...swings.slice(0, index)]
+        .reverse()
+        .find((swing) => swing.kind === "low");
+      if (priorLow && latest.price > priorLow.price) {
+        return { high: latest.price, low: priorLow.price };
+      }
+    }
+  }
+
+  return null;
+}
+
 function averageRange(candles: MarketCandle[]): number {
   if (candles.length === 0) return 0;
   return (
@@ -1215,19 +1248,34 @@ export function analysePriceAction(
     };
   }
 
-  const dealingRange = m15.slice(-48);
-  const rangeHigh = Math.max(...dealingRange.map((candle) => candle.high));
-  const rangeLow = Math.min(...dealingRange.map((candle) => candle.low));
+  const dealingRange =
+    findDealingRange(h4, direction) ??
+    findDealingRange(h1, direction);
+  if (!dealingRange) {
+    return {
+      direction,
+      confidence: bias.confidence,
+      technicalExplanation: bias.explanation +
+        " No confirmed H4/H1 dealing range is available for a premium/discount check.",
+      setup: null,
+    };
+  }
+
+  const { high: rangeHigh, low: rangeLow } = dealingRange;
   const equilibrium = (rangeHigh + rangeLow) / 2;
-  const inCorrectHalf = direction === "bullish"
-    ? input.price <= equilibrium
-    : input.price >= equilibrium;
+  const insideDealingRange =
+    input.price >= rangeLow && input.price <= rangeHigh;
+  const inCorrectHalf = insideDealingRange && (
+    direction === "bullish"
+      ? input.price <= equilibrium
+      : input.price >= equilibrium
+  );
   if (!inCorrectHalf) {
     return {
       direction,
       confidence: bias.confidence,
       technicalExplanation: bias.explanation +
-        " Price is not in the correct premium/discount half of the current dealing range.",
+        " Price is outside the correct half of the active H4/H1 dealing range; waiting for a valid discount/premium retracement.",
       setup: null,
     };
   }
