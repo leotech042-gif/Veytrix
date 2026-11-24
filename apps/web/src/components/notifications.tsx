@@ -395,10 +395,12 @@ export function NotificationBell() {
         {unread > 0 && (
           <span className="notif-badge">{unread > 9 ? "9+" : unread}</span>
         )}
-        <span
-          className={`notif-live-dot${live ? " on" : ""}`}
-          title={live ? "Live alerts" : "Alerts offline"}
-        />
+        {unread > 0 ? (
+          <span
+            className={`notif-live-dot${live ? " on" : ""}`}
+            title={live ? "Live alerts" : "Alerts offline"}
+          />
+        ) : null}
       </button>
 
       {open && (

@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useState } from "react";
 import type { SignalProviderStatus, TradingSignal } from "@veytrix/shared";
 import { getSignalStatus, getSignals } from "@/lib/market-data-api";
@@ -65,6 +64,7 @@ export function SignalsPage() {
   const [filter, setFilter] = useState<"all" | "setup" | "bias">("all");
   const [query, setQuery] = useState("");
   const [refreshing, setRefreshing] = useState(false);
+  const [expandedBiasIds, setExpandedBiasIds] = useState<string[]>([]);
 
   async function load() {
     setRefreshing(true);
@@ -270,30 +270,56 @@ export function SignalsPage() {
           <p className="sig-bias-note">
             No valid entry yet — wait for confluence
           </p>
-          {biases.map((b) => (
-            <Link
-              key={b.id}
-              href={`/charts?symbol=${b.instrument}`}
-              className="sig-bias-row"
-            >
-              <span
-                className={`sig-bias-dot ${b.direction === "bullish" ? "up" : b.direction === "bearish" ? "down" : ""}`}
-              />
-              <span>
-                <strong>
-                  {b.instrument} ·{" "}
-                  {b.direction === "bullish"
-                    ? "Bullish bias"
-                    : b.direction === "bearish"
-                      ? "Bearish bias"
-                      : "Neutral bias"}{" "}
-                  · {b.confidence}%
-                </strong>
-                <span>{b.summary}</span>
-              </span>
-              <span className="chevron">›</span>
-            </Link>
-          ))}
+          {biases.map((b) => {
+            const expanded = expandedBiasIds.includes(b.id);
+            const detailsId = "bias-details-" + b.id.replace(/[^a-zA-Z0-9_-]/g, "-");
+            return (
+              <div className="sig-bias-item" key={b.id}>
+                <button
+                  type="button"
+                  className="sig-bias-row"
+                  aria-expanded={expanded}
+                  aria-controls={detailsId}
+                  onClick={() =>
+                    setExpandedBiasIds((current) =>
+                      expanded
+                        ? current.filter((id) => id !== b.id)
+                        : [...current, b.id],
+                    )
+                  }
+                >
+                  <span
+                    className={`sig-bias-dot ${b.direction === "bullish" ? "up" : b.direction === "bearish" ? "down" : ""}`}
+                  />
+                  <span>
+                    <strong>
+                      {b.instrument} ·{" "}
+                      {b.direction === "bullish"
+                        ? "Bullish bias"
+                        : b.direction === "bearish"
+                          ? "Bearish bias"
+                          : "Neutral bias"}{" "}
+                      · {b.confidence}%
+                    </strong>
+                    <span>{b.summary}</span>
+                  </span>
+                  <span className={"chevron" + (expanded ? " expanded" : "")}>›</span>
+                </button>
+                {expanded ? (
+                  <div className="sig-bias-expanded" id={detailsId}>
+                    <div>
+                      <strong>Technical</strong>
+                      <p>{b.technicalExplanation || b.summary}</p>
+                    </div>
+                    <div>
+                      <strong>Fundamental</strong>
+                      <p>{b.fundamentalExplanation || "No confirmed recent fundamental direction is available for this pair."}</p>
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+            );
+          })}
         </div>
       )}
     </div>

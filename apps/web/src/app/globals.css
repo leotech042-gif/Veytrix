@@ -235,3 +235,198 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outlin
 .set-risk-pills { display: flex; gap: 8px; padding: 0 14px 12px; }
 .site-footer { display: none; }
 .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0); }
+
+
+/* Market watchlist — compact, flag-led quote layout */
+.watchlist-screen {
+  --watch-bg: #e9eef6;
+  --watch-row: #e9eef6;
+  --watch-border: #d4dce8;
+  --watch-text: #1d293b;
+  --watch-muted: #6b778b;
+  --watch-accent: #3159a5;
+  width: calc(100% + 32px);
+  min-height: calc(100dvh - 76px);
+  margin: -16px -16px -96px;
+  padding: 18px 0 104px;
+  overflow: hidden;
+  color: var(--watch-text);
+  background: var(--watch-bg);
+}
+.watchlist-top { padding: 0 16px 14px; }
+.watchlist-search {
+  display: flex; align-items: center; gap: 12px; height: 58px;
+  padding: 0 16px; border: 1.5px solid #d1dae8; border-radius: 18px;
+  background: rgba(255,255,255,.12); color: #657287;
+}
+.watchlist-search > span:first-child { font-size: 27px; line-height: 1; }
+.watchlist-search input {
+  flex: 1; min-width: 0; height: 100%; padding: 0; border: 0; outline: 0;
+  color: var(--watch-text); background: transparent; font-size: 16px;
+}
+.watchlist-search input::placeholder { color: #748197; opacity: 1; }
+.watchlist-search button {
+  width: 28px; height: 28px; border: 0; border-radius: 50%;
+  color: #657287; background: #dbe3ef; font-size: 19px; cursor: pointer;
+}
+.watchlist-tabs {
+  display: flex; gap: 8px; overflow-x: auto; scrollbar-width: none;
+  margin: 14px -16px 0; padding: 0 16px 2px;
+}
+.watchlist-tabs::-webkit-scrollbar { display: none; }
+.watchlist-tab {
+  display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+  flex: 0 0 auto; min-height: 42px; padding: 0 14px;
+  border: 1.5px solid #d5dce7; border-radius: 999px;
+  color: #667287; background: transparent; font-size: 13px; font-weight: 650;
+  white-space: nowrap; cursor: pointer;
+}
+.watchlist-tab span { font-variant-numeric: tabular-nums; font-weight: 700; }
+.watchlist-tab.active {
+  color: #294d8d; border-color: #91a9d6; background: #dce6f6;
+  box-shadow: inset 0 0 0 1px rgba(71,111,177,.12);
+}
+.watchlist-columns {
+  display: flex; align-items: center; justify-content: space-between;
+  min-height: 42px; padding: 0 18px; border-top: 1px solid var(--watch-border);
+  border-bottom: 1px solid var(--watch-border); color: #657287;
+  font-size: 10px; font-weight: 800; letter-spacing: 1px;
+}
+.watchlist-row {
+  position: relative; display: grid;
+  grid-template-columns: minmax(0,1fr) 58px minmax(78px,.68fr) 28px;
+  align-items: center; gap: 8px; min-height: 88px; padding: 12px 12px;
+  border-bottom: 1px solid var(--watch-border); background: var(--watch-row);
+}
+.watchlist-row.selected { background: #dbe5f5; }
+.watchlist-row.selected::before {
+  position: absolute; top: 18px; bottom: 18px; left: 0; width: 4px;
+  border-radius: 0 5px 5px 0; background: #426fc1; content: "";
+}
+.watchlist-instrument {
+  display: flex; align-items: center; min-width: 0; gap: 10px;
+  color: inherit; text-decoration: none;
+}
+.watch-pair-mark { display: flex; align-items: center; flex: 0 0 74px; min-width: 0; }
+.watch-asset {
+  display: grid; place-items: center; flex: 0 0 35px; width: 35px; height: 35px;
+  border: 2px solid #f4f6fa; border-radius: 50%; overflow: hidden;
+  box-shadow: 0 1px 2px rgba(24,40,66,.13); font-size: 21px; line-height: 1;
+}
+.watch-asset + .watch-asset { margin-left: -9px; }
+.watch-asset--flag { background: #fff; }
+.watch-asset--gold {
+  color: #8a5b00; border-color: #f5e8bd;
+  background: radial-gradient(circle at 35% 30%,#fff4bd,#dca93b 65%,#98651b);
+  font-size: 12px; font-weight: 850;
+}
+.watch-asset--silver {
+  color: #536070; border-color: #e2e7ed;
+  background: radial-gradient(circle at 35% 30%,#fff,#b9c3cf 68%,#7e8997);
+  font-size: 12px; font-weight: 850;
+}
+.watch-asset--bitcoin {
+  color: #fff; border-color: #f5d5a7; background: #f7931a; font-size: 22px;
+}
+.watch-asset--ethereum {
+  color: #fff; border-color: #d8d8f0; background: #6977c9; font-size: 17px;
+}
+.watch-asset--generic {
+  color: #fff; border-color: #d9e1ec; background: #64748b;
+  font-size: 10px; font-weight: 800;
+}
+.watchlist-instrument-copy {
+  display: flex; flex-direction: column; gap: 3px; min-width: 0;
+}
+.watchlist-instrument-copy strong {
+  overflow: hidden; color: #1f2b3d; font-size: 15px; font-weight: 750;
+  text-overflow: ellipsis; white-space: nowrap;
+}
+.watchlist-instrument-copy > span {
+  overflow: hidden; color: #6f7b8e; font-size: 12px;
+  text-overflow: ellipsis; white-space: nowrap;
+}
+.watchlist-spark { width: 58px; height: 30px; }
+.watchlist-spark svg { display: block; width: 100%; height: 100%; overflow: visible; }
+.watchlist-spark path {
+  fill: none; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round;
+}
+.watchlist-spark path.up { stroke: #18866f; }
+.watchlist-spark path.down { stroke: #ce5b70; }
+.watchlist-spark-empty { display: block; padding-top: 7px; color: #9aa5b5; text-align: center; }
+.watchlist-price {
+  display: flex; flex-direction: column; align-items: flex-end; gap: 5px;
+  min-width: 0; font-variant-numeric: tabular-nums;
+}
+.watchlist-price > strong {
+  max-width: 100%; overflow: hidden; color: #202b3d; font-size: 15px;
+  font-weight: 750; text-overflow: ellipsis; white-space: nowrap;
+}
+.watchlist-change {
+  min-width: 60px; padding: 3px 7px; border-radius: 7px;
+  color: #718094; background: #dce3ec; text-align: center;
+  font-size: 11px; font-weight: 750;
+}
+.watchlist-change.positive { color: #16836f; background: #cfe4e1; }
+.watchlist-change.negative { color: #b94f64; background: #f0d9df; }
+.watchlist-favorite {
+  display: grid; place-items: center; width: 28px; height: 34px; padding: 0;
+  border: 0; color: #d9a83d; background: transparent; cursor: pointer;
+  font-size: 25px; line-height: 1;
+}
+.watchlist-favorite.active { color: #dfa931; }
+.watchlist-empty {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 8px;
+  margin: 16px; padding: 18px; border: 1px solid #d4dce8; border-radius: 14px;
+  color: #637087; background: rgba(255,255,255,.24); font-size: 13px;
+}
+.watchlist-empty strong { color: #26344a; font-size: 14px; }
+.watchlist-empty a { color: #3159a5; font-weight: 700; text-decoration: none; }
+.watchlist-data-note { margin: 12px 16px 0; color: #758196; font-size: 10px; }
+.watchlist-footer { display: none; }
+@media (min-width: 900px) {
+  .watchlist-screen { width: 100%; margin: 0; border: 1px solid var(--watch-border); border-radius: 16px; }
+  .watchlist-top { padding-right: 20px; padding-left: 20px; }
+  .watchlist-row { grid-template-columns: minmax(220px,1fr) 90px minmax(110px,.5fr) 36px; padding-right: 20px; padding-left: 20px; }
+  .watchlist-columns { padding-right: 24px; padding-left: 24px; }
+}
+
+/* Bias row keeps its original compact shape; the chevron now discloses detail inline. */
+.sig-bias-item { margin-bottom: 8px; }
+.sig-bias-row {
+  width: 100%; margin-bottom: 0; border: 1px solid var(--border-subtle);
+  font: inherit; text-align: left; cursor: pointer;
+}
+.sig-bias-row .chevron { transition: transform .18s ease; }
+.sig-bias-row .chevron.expanded { transform: rotate(90deg); }
+.sig-bias-expanded {
+  display: grid; gap: 10px; padding: 10px 14px 12px 36px;
+  margin: -1px 0 0; border: 1px solid var(--border-subtle);
+  border-top: 0; border-radius: 0 0 12px 12px;
+  background: var(--surface); color: var(--text-secondary);
+}
+.sig-bias-expanded strong { display: block; margin-bottom: 3px; color: var(--text); font-size: 12px; }
+.sig-bias-expanded p { margin: 0; font-size: 12px; line-height: 1.5; }
+
+.watchlist-screen.watchlist-compact {
+  width: 100%; min-height: 0; margin: 0; padding: 0;
+  border-radius: 12px; background: var(--watch-bg);
+}
+.watchlist-compact .watchlist-top { padding: 10px 10px 4px; }
+.watchlist-compact .watchlist-tabs,
+.watchlist-compact .watchlist-columns { display: none; }
+.watchlist-compact .watchlist-search { height: 44px; border-radius: 13px; }
+.watchlist-compact .watchlist-row {
+  grid-template-columns: minmax(0,1fr) 46px minmax(75px,.58fr) 24px;
+  gap: 6px; min-height: 72px; padding: 9px 8px;
+}
+.watchlist-compact .watch-pair-mark { flex-basis: 64px; }
+.watchlist-compact .watch-asset { flex-basis: 31px; width: 31px; height: 31px; font-size: 18px; }
+.watchlist-compact .watchlist-instrument-copy strong { font-size: 13px; }
+.watchlist-compact .watchlist-instrument-copy > span { font-size: 11px; }
+.watchlist-compact .watchlist-spark { width: 46px; height: 26px; }
+.watchlist-compact .watchlist-price > strong { font-size: 13px; }
+.watchlist-compact .watchlist-change { min-width: 52px; font-size: 10px; }
+.watchlist-compact .watchlist-favorite { width: 24px; font-size: 22px; }
+.watchlist-compact .watchlist-data-note,
+.watchlist-compact .watchlist-footer { display: none; }
