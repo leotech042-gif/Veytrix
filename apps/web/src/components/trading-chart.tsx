@@ -311,7 +311,6 @@ export function TradingChart({
         fullScreen ? " chart-fullscreen" : ""
       }`}
     >
-      {/* Top: pair + floating draw strip */}
       <div className="chart-alien-head">
         <div className="chart-alien-pair">
           <span className="chart-pair-flags">{pairFlags(activeInstrument)}</span>
@@ -320,7 +319,10 @@ export function TradingChart({
             <span>{activeInstrument}</span>
           </div>
         </div>
-        <div className="chart-float-tools" title="Drawing tools are on the chart left toolbar">
+        <div
+          className="chart-float-tools"
+          title="Drawing tools are on the chart left toolbar"
+        >
           <span className="chart-float-ico">⋮⋮</span>
           <span className="chart-float-ico">—</span>
           <span className="chart-float-ico">ƒ</span>
@@ -329,7 +331,6 @@ export function TradingChart({
         </div>
       </div>
 
-      {/* Chart only — no news under it */}
       <div className="chart-canvas-wrap chart-alien-canvas">
         <div className="chart-canvas" aria-label="Veytrix chart">
           <div
@@ -345,7 +346,6 @@ export function TradingChart({
         )}
       </div>
 
-      {/* Bottom control bar — pair / TF / fx / full — no news */}
       <div className="chart-bottom-bar">
         <div className="chart-pair-rail" role="list">
           {list.map((item) => (
@@ -353,12 +353,12 @@ export function TradingChart({
               key={item.symbol}
               type="button"
               role="listitem"
-              className={`chart-pair-pill${{
-                [item.symbol.toUpperCase() === activeInstrument.toUpperCase()
+              className={
+                "chart-pair-pill" +
+                (item.symbol.toUpperCase() === activeInstrument.toUpperCase()
                   ? " on"
-                  : ""]:
-                  true,
-              }[""] ? (item.symbol.toUpperCase() === activeInstrument.toUpperCase() ? " chart-pair-pill on" : " chart-pair-pill") : "chart-pair-pill"}`}
+                  : "")
+              }
               onClick={() => setSelectedInstrument(item.symbol)}
             >
               <span className="chart-pair-pill-flags">
@@ -380,7 +380,13 @@ export function TradingChart({
           >
             {timeframes.map((tf) => (
               <option key={tf} value={tf}>
-                {tf === "M15" ? "15m" : tf === "M30" ? "30m" : tf === "H1" ? "1H" : tf}
+                {tf === "M15"
+                  ? "15m"
+                  : tf === "M30"
+                    ? "30m"
+                    : tf === "H1"
+                      ? "1H"
+                      : tf}
               </option>
             ))}
           </select>
