@@ -1180,28 +1180,30 @@ export function analysePriceAction(
       : flipType2Entry && flipType2
         ? flipType2
         : null;
-  const zone = zones[0] ??
-    (apaShiftEntry && h4Aol
-      ? h4Aol
-      : flipZone
-        ? {
-            top: flipZone.bandTop,
-            bottom: flipZone.bandBottom,
-            mid: flipZone.level,
-            kind: "RETEST" as const,
-            createdIndex: m15.length - 1,
-            fill: 0,
-          }
-        : breakRetest
-          ? {
-              top: breakRetest.level + atr * 0.06,
-              bottom: breakRetest.level - atr * 0.06,
-              mid: breakRetest.level,
-              kind: "RETEST" as const,
-              createdIndex: breakRetest.index,
-              fill: 0,
-            }
-          : null);
+  const confirmedFlipZone = flipZone
+    ? {
+        top: flipZone.bandTop,
+        bottom: flipZone.bandBottom,
+        mid: flipZone.level,
+        kind: "RETEST" as const,
+        createdIndex: m15.length - 1,
+        fill: 0,
+      }
+    : null;
+  const zone =
+    confirmedFlipZone ??
+    (apaShiftEntry ? h4Aol : null) ??
+    zones[0] ??
+    (breakRetest
+      ? {
+          top: breakRetest.level + atr * 0.06,
+          bottom: breakRetest.level - atr * 0.06,
+          mid: breakRetest.level,
+          kind: "RETEST" as const,
+          createdIndex: breakRetest.index,
+          fill: 0,
+        }
+      : null);
 
   if (!zone || !isRejectionCandle(m15[m15.length - 1], direction, m15[m15.length - 2])) {
     return {
