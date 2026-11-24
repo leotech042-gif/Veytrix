@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import type { ChartTimeframe, MarketInstrument } from "@veytrix/shared";
-import { useHydrated, usePreferences } from "./theme-provider";
+import { usePreferences } from "./theme-provider";
 import { useMarketFavorites } from "./market-watch";
 
 const timeframes: ChartTimeframe[] = [
@@ -65,14 +65,7 @@ function pairFlags(symbol: string): string {
   if (s.startsWith("XAG")) return "🥈🇺🇸";
   if (s.startsWith("BTC")) return "₿";
   if (s.startsWith("ETH")) return "Ξ";
-  const a = s.slice(0, 3);
-  const b = s.slice(3, 6);
-  return `${PAIR_FLAGS[a] ?? ""}${PAIR_FLAGS[b] ?? ""}`;
-}
-
-function pairTitle(instrument?: MarketInstrument): string {
-  if (!instrument) return "—";
-  return instrument.displayName || instrument.symbol;
+  return `${PAIR_FLAGS[s.slice(0, 3)] ?? ""}${PAIR_FLAGS[s.slice(3, 6)] ?? ""}`;
 }
 
 function toTradingViewSymbol(instrument?: MarketInstrument): string {
@@ -112,8 +105,6 @@ interface WidgetLoadResult {
   error?: string;
 }
 
-type ToolsTab = "drawings" | "indicators" | null;
-
 export function TradingChart({
   instruments,
   initialInstrument = "",
@@ -127,7 +118,6 @@ export function TradingChart({
   const widgetRef = useRef<HTMLDivElement>(null);
   const { favorites } = useMarketFavorites();
   const { preferences, updatePreferences } = usePreferences();
-  const hydrated = useHydrated();
   const resolvedTheme = useSyncExternalStore(
     subscribeToResolvedTheme,
     getResolvedTheme,
@@ -154,10 +144,10 @@ export function TradingChart({
 
   const [selectedInstrument, setSelectedInstrument] = useState("");
   const [selectedTimeframe, setSelectedTimeframe] =
-    useState<ChartTimeframe>("H1");
+    useState<ChartTimeframe>("M30");
   const [fullScreen, setFullScreen] = useState(false);
   const [reloadToken, setReloadToken] = useState(0);
-  const [toolsTab, setToolsTab] = useState<ToolsTab>(null);
+  const [showFx, setShowFx] = useState(false);
   const [widgetLoadResult, setWidgetLoadResult] =
     useState<WidgetLoadResult | null>(null);
 
@@ -166,10 +156,7 @@ export function TradingChart({
   const showVolume = preferences.showVolume ?? true;
 
   const activeInstrument =
-    selectedInstrument ||
-    initialInstrument ||
-    list[0]?.symbol ||
-    "";
+    selectedInstrument || initialInstrument || list[0]?.symbol || "";
 
   const instrument =
     list.find((i) => i.symbol.toUpperCase() === activeInstrument.toUpperCase()) ??
@@ -179,10 +166,10 @@ export function TradingChart({
   const timeframe = selectedTimeframe;
 
   const chartBackground =
-    resolvedTheme === "light" ? "#f7f7f8" : "#0b0d10";
+    resolvedTheme === "light" ? "#ffffff" : "#0b0d10";
   const gridColor =
     resolvedTheme === "light"
-      ? "rgba(0,0,0,0.06)"
+      ? "rgba(0,0,0,0.05)"
       : "rgba(255,255,255,0.04)";
 
   const widgetKey = JSON.stringify([
@@ -234,7 +221,6 @@ export function TradingChart({
       style: "1",
       locale: "en",
       allow_symbol_change: false,
-      // Left drawing toolbar (trend, fib, shapes, measure, etc.)
       hide_side_toolbar: false,
       hide_top_toolbar: false,
       hide_legend: false,
@@ -243,7 +229,6 @@ export function TradingChart({
       hotlist: false,
       calendar: false,
       save_image: true,
-      show_popup_button: false,
       backgroundColor: chartBackground,
       gridColor,
       studies,
@@ -294,11 +279,10 @@ export function TradingChart({
   ]);
 
   useEffect(() => {
-    const syncFullScreen = () => {
+    const sync = () =>
       setFullScreen(document.fullscreenElement === panelRef.current);
-    };
-    document.addEventListener("fullscreenchange", syncFullScreen);
-    return () => document.removeEventListener("fullscreenchange", syncFullScreen);
+    document.addEventListener("fullscreenchange", sync);
+    return () => document.removeEventListener("fullscreenchange", sync);
   }, []);
 
   const toggleFullScreen = () => {
@@ -309,87 +293,137 @@ export function TradingChart({
       return;
     }
     if (fullScreen || typeof panel.requestFullscreen !== "function") {
-      setFullScreen((current) => !current);
+      setFullScreen((c) => !c);
       return;
     }
     void panel.requestFullscreen().catch(() => setFullScreen(true));
   };
 
+  const title =
+    instrument?.displayName?.replace(/\s*\/.*/, "") ||
+    instrument?.symbol ||
+    activeInstrument;
+
   return (
     <section
       ref={panelRef}
-      className={`panel trading-chart-panel${compact ? " compact" : ""}${
+      className={`panel trading-chart-panel chart-alien${compact ? " compact" : ""}${
         fullScreen ? " chart-fullscreen" : ""
       }`}
     >
-      <div className="chart-pair-head">
-        <div className="chart-pair-left">
-          <span className="chart-pair-flags" aria-hidden>
-            {pairFlags(instrument?.symbol ?? activeInstrument)}
-          </span>
-          <div>
-            <strong className="chart-pair-name">
-              {pairTitle(instrument)}
-            </strong>
-            <span className="chart-pair-symbol">{activeInstrument}</span>
+      {/* Top: pair + floating draw strip */}
+      <div className="chart-alien-head">
+        <div className="chart-alien-pair">
+          <span className="chart-pair-flags">{pairFlags(activeInstrument)}</span>
+          <div className="chart-alien-pair-text">
+            <strong>{title}</strong>
+            <span>{activeInstrument}</span>
           </div>
         </div>
-        <div className="chart-pair-actions">
+        <div className="chart-float-tools" title="Drawing tools are on the chart left toolbar">
+          <span className="chart-float-ico">⋮⋮</span>
+          <span className="chart-float-ico">—</span>
+          <span className="chart-float-ico">ƒ</span>
+          <span className="chart-float-ico">▢</span>
+          <span className="chart-float-ico">／</span>
+        </div>
+      </div>
+
+      {/* Chart only — no news under it */}
+      <div className="chart-canvas-wrap chart-alien-canvas">
+        <div className="chart-canvas" aria-label="Veytrix chart">
+          <div
+            className="tradingview-widget-container__widget"
+            ref={widgetRef}
+            style={{ width: "100%", height: "100%", minHeight: 420 }}
+          />
+        </div>
+        {(loading || error) && (
+          <div className="chart-overlay" role={error ? "alert" : "status"}>
+            <strong>{error ? error : "Loading chart…"}</strong>
+          </div>
+        )}
+      </div>
+
+      {/* Bottom control bar — pair / TF / fx / full — no news */}
+      <div className="chart-bottom-bar">
+        <div className="chart-pair-rail" role="list">
+          {list.map((item) => (
+            <button
+              key={item.symbol}
+              type="button"
+              role="listitem"
+              className={`chart-pair-pill${{
+                [item.symbol.toUpperCase() === activeInstrument.toUpperCase()
+                  ? " on"
+                  : ""]:
+                  true,
+              }[""] ? (item.symbol.toUpperCase() === activeInstrument.toUpperCase() ? " chart-pair-pill on" : " chart-pair-pill") : "chart-pair-pill"}`}
+              onClick={() => setSelectedInstrument(item.symbol)}
+            >
+              <span className="chart-pair-pill-flags">
+                {pairFlags(item.symbol)}
+              </span>
+              <span>{item.symbol}</span>
+            </button>
+          ))}
+        </div>
+
+        <div className="chart-bottom-actions">
+          <select
+            className="chart-tf-pill"
+            value={timeframe}
+            onChange={(e) =>
+              setSelectedTimeframe(e.target.value as ChartTimeframe)
+            }
+            aria-label="Timeframe"
+          >
+            {timeframes.map((tf) => (
+              <option key={tf} value={tf}>
+                {tf === "M15" ? "15m" : tf === "M30" ? "30m" : tf === "H1" ? "1H" : tf}
+              </option>
+            ))}
+          </select>
+
           <button
             type="button"
-            className="secondary-button chart-tool-btn"
+            className={`chart-icon-btn${showFx ? " on" : ""}`}
+            aria-label="Indicators"
+            onClick={() => setShowFx((v) => !v)}
+          >
+            ƒx
+          </button>
+
+          <button
+            type="button"
+            className="chart-icon-btn"
+            aria-label="Reload chart"
             onClick={() => setReloadToken((t) => t + 1)}
           >
-            Reload
+            ↻
           </button>
+
           <button
             type="button"
-            className="secondary-button chart-tool-btn"
-            onClick={toggleFullScreen}
+            className="chart-icon-btn"
+            aria-label={fullScreen ? "Exit full screen" : "Full screen"}
             aria-pressed={fullScreen}
+            onClick={toggleFullScreen}
           >
-            {fullScreen ? "Exit" : "Full"}
+            {fullScreen ? "✕" : "⛶"}
           </button>
         </div>
       </div>
 
-      <div className="chart-toolbar chart-toolbar-compact">
-        <select
-          className="chart-select"
-          value={activeInstrument}
-          onChange={(e) => setSelectedInstrument(e.target.value)}
-          aria-label="Instrument"
-        >
-          {list.map((item) => (
-            <option key={item.symbol} value={item.symbol}>
-              {item.symbol}
-            </option>
-          ))}
-        </select>
-
-        <select
-          className="chart-select"
-          value={timeframe}
-          onChange={(e) =>
-            setSelectedTimeframe(e.target.value as ChartTimeframe)
-          }
-          aria-label="Timeframe"
-        >
-          {timeframes.map((tf) => (
-            <option key={tf} value={tf}>
-              {tf}
-            </option>
-          ))}
-        </select>
-
-        <div className="chart-indicator-toggles">
+      {showFx && (
+        <div className="chart-fx-sheet">
           <label>
             <input
               type="checkbox"
               checked={showSma}
               onChange={(e) => updatePreferences({ showSma: e.target.checked })}
             />
-            MA
+            SMA
           </label>
           <label>
             <input
@@ -407,130 +441,12 @@ export function TradingChart({
                 updatePreferences({ showVolume: e.target.checked })
               }
             />
-            Vol
+            Volume
           </label>
-        </div>
-      </div>
-
-      <div className="chart-canvas-wrap">
-        <div className="chart-canvas" aria-label="Veytrix chart">
-          <div
-            className="tradingview-widget-container__widget"
-            ref={widgetRef}
-            style={{ width: "100%", height: "100%", minHeight: 480 }}
-          />
-        </div>
-        {(loading || error) && (
-          <div className="chart-overlay" role={error ? "alert" : "status"}>
-            <strong>{error ? error : "Loading chart…"}</strong>
-          </div>
-        )}
-      </div>
-
-      <div className="chart-tools-dock">
-        <button
-          type="button"
-          className={`chart-dock-btn${toolsTab === "drawings" ? " on" : ""}`}
-          onClick={() =>
-            setToolsTab((t) => (t === "drawings" ? null : "drawings"))
-          }
-        >
-          <span aria-hidden>✎</span> Drawings
-        </button>
-        <button
-          type="button"
-          className={`chart-dock-btn${toolsTab === "indicators" ? " on" : ""}`}
-          onClick={() =>
-            setToolsTab((t) => (t === "indicators" ? null : "indicators"))
-          }
-        >
-          <span aria-hidden>ƒx</span> Indicators
-        </button>
-        <button
-          type="button"
-          className="chart-dock-btn"
-          onClick={toggleFullScreen}
-        >
-          <span aria-hidden>⛶</span> {fullScreen ? "Exit" : "Full"}
-        </button>
-      </div>
-
-      {toolsTab === "drawings" && (
-        <div className="chart-tools-sheet" role="dialog" aria-label="Drawings">
-          <div className="chart-tools-sheet-head">
-            <strong>Drawings</strong>
-            <button type="button" className="text-button" onClick={() => setToolsTab(null)}>
-              Close
-            </button>
-          </div>
           <p className="chart-tools-hint">
-            Use the <strong>left toolbar</strong> on the chart for live tools:
-            trend line, ray, horizontal, fib, rectangle, brush, measure, long/short
-            position, and more. Object tree is on TradingView’s side panel.
+            More indicators and all drawings are on the chart toolbars (left /
+            top).
           </p>
-          <div className="chart-tools-grid">
-            {[
-              "Horizontal line",
-              "Trend line",
-              "Ray",
-              "Fib retracement",
-              "Rectangle",
-              "Long / short position",
-              "Arrow",
-              "Measure",
-            ].map((label) => (
-              <div key={label} className="chart-tool-chip">
-                {label}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {toolsTab === "indicators" && (
-        <div className="chart-tools-sheet" role="dialog" aria-label="Indicators">
-          <div className="chart-tools-sheet-head">
-            <strong>Indicators</strong>
-            <button type="button" className="text-button" onClick={() => setToolsTab(null)}>
-              Close
-            </button>
-          </div>
-          <p className="chart-tools-hint">
-            Quick toggles below, or open the full library from the chart’s
-            Indicators button (top bar).
-          </p>
-          <div className="chart-indicator-toggles chart-indicator-sheet">
-            <label>
-              <input
-                type="checkbox"
-                checked={showSma}
-                onChange={(e) =>
-                  updatePreferences({ showSma: e.target.checked })
-                }
-              />
-              Moving average (SMA)
-            </label>
-            <label>
-              <input
-                type="checkbox"
-                checked={showEma}
-                onChange={(e) =>
-                  updatePreferences({ showEma: e.target.checked })
-                }
-              />
-              EMA
-            </label>
-            <label>
-              <input
-                type="checkbox"
-                checked={showVolume}
-                onChange={(e) =>
-                  updatePreferences({ showVolume: e.target.checked })
-                }
-              />
-              Volume
-            </label>
-          </div>
         </div>
       )}
     </section>
