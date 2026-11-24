@@ -13,6 +13,7 @@ import { TechnicalSignalProvider } from "./signals/technical-signal.provider";
 import { FundamentalsModule } from "./fundamentals/fundamentals.module";
 import { AlertsHub } from "./alerts/alerts.hub";
 import { AlertsScanner } from "./alerts/alerts.scanner";
+import { BacktestingModule } from "./backtesting/backtesting.module";
 
 @Module({
   imports: [
@@ -23,6 +24,7 @@ import { AlertsScanner } from "./alerts/alerts.scanner";
       },
     ]),
     FundamentalsModule,
+    BacktestingModule,
   ],
   controllers: [HealthController, MarketDataController, SignalsController],
   providers: [
