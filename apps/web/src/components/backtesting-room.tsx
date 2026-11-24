@@ -22,10 +22,12 @@ function CandleChart({candles,trade}:{candles:MarketCandle[];trade:Trade|null}){
  const width=1100,height=390;
  const chart=useMemo(()=>{
   if(!candles.length)return null;
-  const min=Math.min(...candles.map(c=>c.low)),max=Math.max(...candles.map(c=>c.high));
+  const prices=candles.flatMap(c=>[c.low,c.high]);
+  if(trade)prices.push(trade.entry,trade.stopLoss,trade.takeProfit);
+  const min=Math.min(...prices),max=Math.max(...prices);
   const pad=(max-min)*.08||Math.abs(max)*.001||.00001,lo=min-pad,hi=max+pad;
   return {y:(p:number)=>height-((p-lo)/(hi-lo))*height,step:width/candles.length};
- },[candles]);
+ },[candles,trade]);
  if(!chart)return <div className="bt-chart-empty">No historical candles loaded.</div>;
  const level=(price:number,label:string,color:string)=><g key={label}><line x1="0" x2={width} y1={chart.y(price)} y2={chart.y(price)} stroke={color} strokeDasharray="7 5"/><text x="8" y={Math.max(14,chart.y(price)-5)} fill={color} fontSize="12">{label+" "+price}</text></g>;
  return <div className="bt-chart-wrap"><svg className="bt-chart" viewBox={"0 0 "+width+" "+height} role="img" aria-label="Historical candles and selected strategy setup">
@@ -66,7 +68,7 @@ export function BacktestingRoom(){
   {error&&<div className="bt-error" role="alert">{error}</div>}
   {loading&&<div className="bt-loading" role="status">Fetching real candles and evaluating setups chronologically…</div>}
   {result&&<>
-   <div className="bt-result-meta"><strong>{result.instrument}</strong><span>Entry timeframe: automatic · {result.entryTimeframe}</span><span>Top-down: {result.analysisTimeframes.join(" → ")}</span><span>{new Date(result.period.from).toLocaleDateString()} – {new Date(result.period.to).toLocaleDateString()}</span></div>
+   <div className="bt-result-meta"><strong>{result.instrument}</strong><span>Entry timeframe · {result.entryTimeframe}</span><span>Top-down: {result.analysisTimeframes.join(" → ")}</span><span>{new Date(result.period.from).toLocaleDateString()} – {new Date(result.period.to).toLocaleDateString()}</span></div>
    <div className="bt-tabs"><button type="button" className={tab==="backtest"?"active":""} onClick={()=>{setTab("backtest");setSelected(null)}}>Historical backtest</button><button type="button" className={tab==="forward"?"active":""} onClick={()=>{setTab("forward");setSelected(null)}}>Out-of-sample forward test</button></div>
    <TestPanel title={tab==="backtest"?"Historical results":"Forward results · unseen segment"} segment={tab==="backtest"?result.backtest:result.forward}/>
    <section className="bt-chart-panel"><div className="bt-panel-heading"><h3>Price action & detected setup</h3><span>{selected?selected.direction.toUpperCase()+" · "+selected.outcome.toUpperCase():"Select a setup below"}</span></div><CandleChart candles={result.data} trade={selected}/>
