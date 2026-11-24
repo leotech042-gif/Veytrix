@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import type { FormEvent } from "react";
 import type { MarketCandle, MarketInstrument } from "@veytrix/shared";
 import { getMarketInstruments } from "@/lib/market-data-api";
 
@@ -56,7 +57,7 @@ export function BacktestingRoom(){
  const [tab,setTab]=useState<"backtest"|"forward">("backtest");
  useEffect(()=>{let active=true;getMarketInstruments().then(items=>{if(!active)return;const supported=items.filter(x=>x.category==="forex"||x.category==="metals");setInstruments(supported);if(supported.length&&!supported.some(x=>x.symbol===instrument))setInstrument(supported[0].symbol)}).catch(e=>{if(active)setError(e instanceof Error?e.message:"Could not load instruments")});return()=>{active=false}},[]);
  const trades=tab==="backtest"?(result?.backtest.trades??[]):(result?.forward.trades??[]);
- async function runTest(e:React.FormEvent<HTMLFormElement>){e.preventDefault();setLoading(true);setError("");setResult(null);setSelected(null);try{const q=new URLSearchParams({instrument,from:new Date(from+"T00:00:00.000Z").toISOString(),to:new Date(to+"T23:59:59.999Z").toISOString()});const response=await fetch(apiUrl+"/backtesting/run?"+q,{cache:"no-store"});const body=await response.json().catch(()=>null);if(!response.ok)throw new Error(typeof body?.message==="string"?body.message:"Backtest request failed");setResult(body as Result)}catch(err){setError(err instanceof Error?err.message:"Backtest failed")}finally{setLoading(false)}}
+ async function runTest(e:FormEvent<HTMLFormElement>){e.preventDefault();setLoading(true);setError("");setResult(null);setSelected(null);try{const q=new URLSearchParams({instrument,from:new Date(from+"T00:00:00.000Z").toISOString(),to:new Date(to+"T23:59:59.999Z").toISOString()});const response=await fetch(apiUrl+"/backtesting/run?"+q,{cache:"no-store"});const body=await response.json().catch(()=>null);if(!response.ok)throw new Error(typeof body?.message==="string"?body.message:"Backtest request failed");setResult(body as Result)}catch(err){setError(err instanceof Error?err.message:"Backtest failed")}finally{setLoading(false)}}
  return <div className="backtesting-room">
   <header className="bt-header"><div><span className="bt-eyebrow">TEMPORARY STRATEGY EVALUATION</span><h1>Backtesting Room</h1><p>Test Veytrix setups against historical candles. No live orders.</p></div><span className="bt-paper-label">PAPER TEST ONLY</span></header>
   <form className="bt-controls" onSubmit={runTest}>
