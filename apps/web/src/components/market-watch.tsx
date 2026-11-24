@@ -283,8 +283,8 @@ function WatchAssetMark({
   part: string;
   symbol: string;
 }) {
-  const flag = CURRENCY_FLAGS[part];
-  let label = flag ?? part.slice(0, 3);
+  const country = CURRENCY_COUNTRIES[part];
+  let label = part.slice(0, 3);
   let tone = "watch-asset--generic";
   if (part === "XAU") {
     label = "Au";
@@ -298,16 +298,15 @@ function WatchAssetMark({
   } else if (part === "ETH") {
     label = "◆";
     tone = "watch-asset--ethereum";
-  } else if (flag) {
-    tone = "watch-asset--flag";
-  } else if (symbol.startsWith("US") && /[0-9]/.test(symbol)) {
-    label = "🇺🇸";
+  } else if (country || (symbol.startsWith("US") && /[0-9]/.test(symbol))) {
     tone = "watch-asset--flag";
   }
 
   return (
-    <span className={"watch-asset " + tone} aria-label={part}>
-      {label}
+    <span className={"watch-asset " + tone} aria-label={part} title={part}>
+      {country ? (
+        <img src={"https://flagcdn.com/w80/" + country + ".png"} alt={part} loading="lazy" />
+      ) : label}
     </span>
   );
 }
@@ -418,7 +417,7 @@ export function MarketWatch({
             .map((candle) => ({ time: candle.time, close: candle.close }));
           return [instrument.symbol.toUpperCase(), values] as const;
         } catch {
-          return [instrument.symbol.toUpperCase(), []] as const;
+          return [instrument.symbol.toUpperCase(), [] as Pick<MarketCandle, "time" | "close">[]] as const;
         }
       }),
     ).then((entries) => {
