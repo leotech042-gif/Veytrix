@@ -17,6 +17,7 @@ import {
   type ThemePreference,
 } from "./theme-provider";
 import { SignalsPage } from "./signals-page";
+import { BacktestingRoom } from "./backtesting-room";
 
 export function SectionPage({
   section,
@@ -28,6 +29,7 @@ export function SectionPage({
   const feed = useMarketFeed();
 
   if (section === "signals") return <SignalsPage />;
+  if (section === "backtesting") return <BacktestingRoom />;
   if (section === "fundamentals") return <FundamentalsPage />;
   if (section === "settings") return <SettingsPage />;
   if (section === "faq") return <FaqPage />;
