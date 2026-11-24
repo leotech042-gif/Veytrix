@@ -30,15 +30,19 @@ export function AuthGate({ children }: { children: ReactNode }) {
   const [ok, setOk] = useState(false);
 
   useEffect(() => {
-    const authed = isAuthenticated();
-    setOk(authed);
-    setReady(true);
-    if (!authed && pathname !== "/login") {
-      router.replace("/login");
-    }
-    if (authed && pathname === "/login") {
-      router.replace("/");
-    }
+    const timer = window.setTimeout(() => {
+      const authed = isAuthenticated();
+      setOk(authed);
+      setReady(true);
+      if (!authed && pathname !== "/login") {
+        router.replace("/login");
+      }
+      if (authed && pathname === "/login") {
+        router.replace("/");
+      }
+    }, 0);
+
+    return () => window.clearTimeout(timer);
   }, [pathname, router]);
 
   if (!ready) {
