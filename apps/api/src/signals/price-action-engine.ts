@@ -1381,6 +1381,9 @@ export function analysePriceAction(
           : ", followed by a confirmed rejection.");
 
   const lastM15Time = m15[m15.length - 1].time;
+  const zoneCreatedTime = apaShiftEntry && h4Aol
+    ? h4[Math.max(0, Math.min(zone.createdIndex, h4.length - 1))].time
+    : m15[Math.max(0, Math.min(zone.createdIndex, m15.length - 1))].time;
   const annotations: PriceActionAnnotation[] = [
     ...findSwings(m15).slice(-6).map((swing) => ({
       type: "level" as const,
@@ -1406,7 +1409,7 @@ export function analysePriceAction(
     {
       type: "zone",
       label: zone.kind.replaceAll("_", " "),
-      from: m15[Math.max(0, Math.min(zone.createdIndex, m15.length - 1))].time,
+      from: zoneCreatedTime,
       to: lastM15Time,
       top: zone.top,
       bottom: zone.bottom,
