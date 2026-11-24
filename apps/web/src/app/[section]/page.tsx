@@ -9,6 +9,7 @@ const sections = new Set([
   "signals",
   "fundamentals",
   "history",
+  "backtesting",
   "assistant",
   "settings",
   "faq",
