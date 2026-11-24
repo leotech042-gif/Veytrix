@@ -100,9 +100,13 @@ export function SignalsPage() {
   }
 
   useEffect(() => {
-    void load();
-    const t = window.setInterval(() => void load(), 60_000);
-    return () => window.clearInterval(t);
+    const initial = window.setTimeout(() => void load(), 0);
+    const interval = window.setInterval(() => void load(), 60_000);
+
+    return () => {
+      window.clearTimeout(initial);
+      window.clearInterval(interval);
+    };
   }, [marketFavorites.join(",")]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function runSearch() {

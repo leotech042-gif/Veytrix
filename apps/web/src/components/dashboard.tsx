@@ -26,7 +26,11 @@ export function Dashboard() {
   }, [favorites]);
 
   useEffect(() => {
-    void loadSignals();
+    const timer = window.setTimeout(() => {
+      void loadSignals();
+    }, 0);
+
+    return () => window.clearTimeout(timer);
   }, [loadSignals]);
 
   const topBias =

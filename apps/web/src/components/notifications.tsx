@@ -124,9 +124,13 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
   const seenRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
-    setItems(loadStored());
-    seenRef.current = loadSeen();
-    setHydrated(true);
+    const timer = window.setTimeout(() => {
+      setItems(loadStored());
+      seenRef.current = loadSeen();
+      setHydrated(true);
+    }, 0);
+
+    return () => window.clearTimeout(timer);
   }, []);
 
   useEffect(() => {
