@@ -29,7 +29,7 @@ export interface UserPreferences {
 const STORAGE_KEY = "veytrix.preferences.v1";
 
 const defaults: UserPreferences = {
-  theme: "system",
+  theme: "dark",
   defaultTimeframe: "H1",
   chartBackground: "#0e141d",
   bullishColor: "#8bd878",
@@ -206,7 +206,7 @@ export function useHydrated(): boolean {
 export const themeBootstrapScript = `try {
   const saved = localStorage.getItem("${STORAGE_KEY}");
   const prefs = saved ? JSON.parse(saved) : null;
-  const theme = prefs && ["light", "dark", "system"].includes(prefs.theme) ? prefs.theme : "system";
+  const theme = prefs && ["light", "dark", "system"].includes(prefs.theme) ? prefs.theme : "dark";
   document.documentElement.dataset.theme = theme === "system"
     ? (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light")
     : theme;
