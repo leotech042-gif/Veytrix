@@ -179,6 +179,32 @@ export class FinnhubFundamentalsProvider implements FundamentalsProvider {
       : new Date(fallbackMs).toISOString().slice(0, 10);
   }
 
+  private parseReleaseTime(value: unknown): string | null {
+    if (typeof value !== "string") return null;
+
+    const raw = value.trim();
+    if (!raw) return null;
+
+    // Finnhub calendar events commonly use "YYYY-MM-DD HH:mm:ss".
+    // Normalize timezone-less timestamps as UTC so the browser and API server
+    // agree on the release instant.
+    const withIsoSeparator = raw.replace(
+      /^(\d{4}-\d{2}-\d{2})\s+(\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?)$/,
+      "$1T$2Z",
+    );
+
+    // ISO timestamps without an explicit offset are also interpreted as UTC.
+    const normalized =
+      /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?$/.test(
+        withIsoSeparator,
+      )
+        ? `${withIsoSeparator}Z`
+        : withIsoSeparator;
+
+    const parsed = new Date(normalized);
+    return Number.isFinite(parsed.getTime()) ? parsed.toISOString() : null;
+  }
+
   private mapEvent(row: Record<string, unknown>): EconomicEvent | null {
     const eventName =
       typeof row.event === "string"
@@ -201,15 +227,14 @@ export class FinnhubFundamentalsProvider implements FundamentalsProvider {
     const estimate = this.num(row.estimate ?? row.forecast);
     const previous = this.num(row.prev ?? row.previous);
 
-    let time: string;
-    if (typeof row.time === "string" && row.time.includes("T")) {
-      time = new Date(row.time).toISOString();
-    } else if (typeof row.time === "string" && typeof row.date === "string") {
-      time = new Date(`${row.date}T${row.time}Z`).toISOString();
-    } else if (typeof row.date === "string") {
-      time = new Date(`${row.date}T12:00:00Z`).toISOString();
-    } else {
-      time = new Date().toISOString();
+    const time = this.parseReleaseTime(row.time);
+    if (!time) {
+      // Never assign Date.now() to a release with a missing/unparseable
+      // provider timestamp: that silently moves historical releases to today.
+      this.logger.warn(
+        `Skipping Finnhub calendar event without a valid release timestamp: ${eventName}`,
+      );
+      return null;
     }
 
     const surprise =
