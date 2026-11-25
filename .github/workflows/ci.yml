@@ -42,6 +42,9 @@ jobs:
       - name: Build shared workspace package
         run: pnpm --filter @veytrix/shared build
 
+      - name: Test Finnhub calendar timestamp normalization
+        run: pnpm --filter @veytrix/api test
+
       - name: Type-check workspace
         run: pnpm run typecheck
 
