@@ -1135,7 +1135,8 @@ function analyseAtEntryTimeframe(
   if (
     bias.direction === "neutral" ||
     h4Structure.direction !== bias.direction ||
-    h1Structure.direction !== bias.direction ||
+    (h1Structure.direction !== "neutral" &&
+      h1Structure.direction !== bias.direction) ||
     !Number.isFinite(input.price) ||
     input.price <= 0
   ) {
