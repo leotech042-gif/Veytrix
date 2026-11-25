@@ -73,7 +73,7 @@ function aggregateMinuteCandles(
       const volumes = ordered.map((candle) => candle.volume);
       const volume =
         volumes.every((value) => typeof value === "number" && Number.isFinite(value))
-          ? volumes.reduce((total, value) => total + (value ?? 0), 0)
+          ? volumes.reduce<number>((total, value) => total + (value ?? 0), 0)
           : undefined;
 
       return [{
