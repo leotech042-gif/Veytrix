@@ -141,6 +141,7 @@ export class DerivMarketDataProvider implements MarketDataProvider {
   private toGranularity(tf: ChartTimeframe): number {
     switch (tf) {
       case "M1": return 60;
+      case "M3": return 180;
       case "M5": return 300;
       case "M15": return 900;
       case "M30": return 1800;
