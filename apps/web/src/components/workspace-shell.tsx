@@ -11,7 +11,6 @@ import {
   NotificationBell,
   NotificationsProvider,
 } from "./notifications";
-import { VeytrixLoader } from "./veytrix-loader";
 
 const desktopNav = [
   { href: "/", label: "Home", icon: "home" },
@@ -70,20 +69,6 @@ function NavIcon({ name, active }: { name: string; active?: boolean }) {
           <path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" strokeLinecap="round" />
         </svg>
       );
-    case "markets":
-      return (
-        <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="1.8">
-          <path d="M3 17h18M5 17V9l4 3 3-6 3 4 4-5v12" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-      );
-    case "faq":
-      return (
-        <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="1.8">
-          <circle cx="12" cy="12" r="9" />
-          <path d="M9.5 9a2.5 2.5 0 015 0c0 1.5-2.5 2-2.5 4" strokeLinecap="round" />
-          <circle cx="12" cy="17" r="0.8" fill={c} stroke="none" />
-        </svg>
-      );
     default:
       return <span>•</span>;
   }
@@ -97,17 +82,22 @@ type StatusState =
 function useMarketConnection(): StatusState {
   const [state, setState] = useState<StatusState>({ kind: "checking" });
   useEffect(() => {
-    let cancelled = false;
-    void (async () => {
+    let active = true;
+    let timer: number | undefined;
+    const check = async () => {
       try {
         const status = await getMarketStatus();
-        if (!cancelled) setState({ kind: "ready", status });
+        if (active) setState({ kind: "ready", status });
       } catch {
-        if (!cancelled) setState({ kind: "error" });
+        if (active) setState({ kind: "error" });
+      } finally {
+        if (active) timer = window.setTimeout(check, 30_000);
       }
-    })();
+    };
+    void check();
     return () => {
-      cancelled = true;
+      active = false;
+      if (timer !== undefined) window.clearTimeout(timer);
     };
   }, []);
   return state;
@@ -133,95 +123,77 @@ function ShellInner({ children }: { children: React.ReactNode }) {
     visibleConnection.status.state === "connected" &&
     !visibleConnection.status.delayed;
 
-  const [navLoading, setNavLoading] = useState(false);
-  const [online, setOnline] = useState(true);
-
-  useEffect(() => {
-    setNavLoading(true);
-    const t = window.setTimeout(() => setNavLoading(false), 650);
-    return () => window.clearTimeout(t);
-  }, [pathname]);
-
-  useEffect(() => {
-    const sync = () => setOnline(navigator.onLine);
-    sync();
-    window.addEventListener("online", sync);
-    window.addEventListener("offline", sync);
-    return () => {
-      window.removeEventListener("online", sync);
-      window.removeEventListener("offline", sync);
-    };
-  }, []);
-
   if (pathname === "/login") {
     return <>{children}</>;
   }
 
   return (
-    <div className="workspace">
-      <aside className="sidebar desktop-only">
-        <div className="brand-block">
-          <span className="brand-mark">V</span>
-          <div>
-            <strong>Veytrix</strong>
-            <span className="brand-sub">Workspace</span>
+    <div className="app-shell">
+      <aside className="sidebar">
+        <Link className="brand" href="/" aria-label="Veytrix home">
+          <img src="/logo.svg" alt="" className="brand-logo" width={32} height={32} />
+          Veytrix
+        </Link>
+        <nav className="desktop-nav" aria-label="Main">
+          <p className="nav-label">Workspace</p>
+          <div className="nav-list">
+            {desktopNav.map((item) => {
+              const active =
+                item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
+              return (
+                <Link
+                  key={item.href}
+                  className={`nav-item${active ? " active" : ""}`}
+                  href={item.href}
+                  aria-current={active ? "page" : undefined}
+                >
+                  <span className="nav-icon">
+                    <NavIcon name={item.icon} active={active} />
+                  </span>
+                  {item.label}
+                </Link>
+              );
+            })}
           </div>
-        </div>
-        <nav className="side-nav">
-          {desktopNav.map((item) => {
-            const active =
-              item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={active ? "nav-link active" : "nav-link"}
-              >
-                <NavIcon name={item.icon} active={active} />
-                <span>{item.label}</span>
-              </Link>
-            );
-          })}
         </nav>
-        <div className="sidebar-footer">
-          <span className={`feed-dot${isConnected ? " on" : ""}`} />
-          <span className="feed-label">{connectionLabel(visibleConnection)}</span>
-          <ThemeToggle />
-          <NotificationBell />
+        <div className="sidebar-bottom">
+          <div className="connection-card">
+            <div className="connection-title">
+              <span className={`state-dot${isConnected ? " connected" : ""}`} />
+              {connectionLabel(visibleConnection)}
+            </div>
+          </div>
         </div>
       </aside>
 
       <div className="workspace-main">
-        <header className="top-bar mobile-only">
-          <strong>Veytrix</strong>
-          <div className="top-bar-actions">
+        <header className="topbar">
+          <Link className="brand" href="/">
+            <img src="/logo.svg" alt="" className="brand-logo" width={28} height={28} />
+            Veytrix
+          </Link>
+          <div className="top-actions">
+            <span className="market-state">
+              <span className={`state-dot${isConnected ? " connected" : ""}`} />
+              {connectionLabel(visibleConnection)}
+            </span>
             <NotificationBell />
             <ThemeToggle />
           </div>
         </header>
 
-        <main className="main-area" style={{ position: "relative" }}>
-          {children}
-          {navLoading ? (
-            <VeytrixLoader variant="overlay" label="Loading…" />
-          ) : null}
-          {!online ? (
-            <VeytrixLoader
-              variant="overlay"
-              label="No internet · reconnecting…"
-            />
-          ) : null}
-        </main>
+        <main className="main-area">{children}</main>
 
-        <nav className="bottom-nav mobile-only">
+        <nav className="mobile-bottom-nav" aria-label="Primary">
           {bottomNav.map((item) => {
             const active =
               item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
             return (
               <Link
                 key={item.href}
+                className={`mobile-bottom-item${active ? " active" : ""}`}
                 href={item.href}
-                className={active ? "bottom-link active" : "bottom-link"}
+                aria-current={active ? "page" : undefined}
               >
                 <NavIcon name={item.icon} active={active} />
                 <span>{item.label}</span>
@@ -240,4 +212,23 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }) {
       <ShellInner>{children}</ShellInner>
     </NotificationsProvider>
   );
+}
+
+export function getOfficialSocialLinks() {
+  const links = [
+    {
+      label: "X",
+      url: process.env.NEXT_PUBLIC_SOCIAL_X_URL ?? "https://x.com/Veytrixofficial",
+      host: "x.com",
+    },
+  ];
+  return links.filter((link): link is typeof link & { url: string } => {
+    if (!link.url) return false;
+    try {
+      const url = new URL(link.url);
+      return url.protocol === "https:" && url.hostname.endsWith(link.host);
+    } catch {
+      return false;
+    }
+  });
 }
