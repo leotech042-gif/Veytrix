@@ -1219,7 +1219,7 @@ function analyseAtEntryTimeframe(
       direction,
       confidence: bias.confidence,
       technicalExplanation: bias.explanation +
-        " No confirmed M15 sweep-and-shift or break-and-retest trigger is present.",
+        ` No confirmed ${entryTimeframe} sweep-and-shift or break-and-retest trigger is present.`,
       setup: null,
     };
   }
@@ -1267,7 +1267,7 @@ function analyseAtEntryTimeframe(
       direction,
       confidence: bias.confidence,
       technicalExplanation: bias.explanation +
-        " M15 has not yet confirmed a rejection from a fresh, unconsumed entry area.",
+        ` ${entryTimeframe} has not yet confirmed a rejection from a fresh, unconsumed entry area.`,
       setup: null,
     };
   }
