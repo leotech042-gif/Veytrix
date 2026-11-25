@@ -53,7 +53,7 @@ export class FinnhubFundamentalsProvider implements FundamentalsProvider {
     return {
       state: "connected",
       provider: "Finnhub Economic Calendar",
-      message: "Live calendar · actual / forecast / previous · pair bias",
+      message: "Finnhub · economic calendar, releases and Forex news",
       updatedAt: new Date().toISOString(),
     };
   }
