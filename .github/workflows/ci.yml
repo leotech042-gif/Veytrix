@@ -7,7 +7,7 @@ on:
     branches: [fix/restore-pa-smc-engine]
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: veytrix-ci-${{ github.ref }}
@@ -42,19 +42,11 @@ jobs:
       - name: Build shared workspace package
         run: pnpm --filter @veytrix/shared build
 
+      - name: Test Finnhub calendar timestamp normalization
+        run: pnpm --filter @veytrix/api test
+
       - name: Type-check workspace
         run: pnpm run typecheck
 
       - name: Build workspace
         run: pnpm run build
-
-      - name: Commit lockfile repair
-        if: github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)
-        run: |
-          if ! git diff --quiet -- pnpm-lock.yaml; then
-            git config user.name "github-actions[bot]"
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add pnpm-lock.yaml
-            git commit -m "chore: sync pnpm lockfile"
-            git push origin "HEAD:${{ github.head_ref || github.ref_name }}"
-          fi

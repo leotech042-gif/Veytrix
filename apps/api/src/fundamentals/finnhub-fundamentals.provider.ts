@@ -8,6 +8,7 @@ import type {
   MarketNewsCategory,
 } from "@veytrix/shared";
 import type { FundamentalsProvider } from "./fundamentals-provider";
+import { parseFinnhubReleaseTime } from "./finnhub-time";
 
 /** Major FX pairs per currency for bias expansion */
 const CURRENCY_PAIRS: Record<string, string[]> = {
@@ -201,15 +202,14 @@ export class FinnhubFundamentalsProvider implements FundamentalsProvider {
     const estimate = this.num(row.estimate ?? row.forecast);
     const previous = this.num(row.prev ?? row.previous);
 
-    let time: string;
-    if (typeof row.time === "string" && row.time.includes("T")) {
-      time = new Date(row.time).toISOString();
-    } else if (typeof row.time === "string" && typeof row.date === "string") {
-      time = new Date(`${row.date}T${row.time}Z`).toISOString();
-    } else if (typeof row.date === "string") {
-      time = new Date(`${row.date}T12:00:00Z`).toISOString();
-    } else {
-      time = new Date().toISOString();
+    const time = parseFinnhubReleaseTime(row.time);
+    if (!time) {
+      // Never assign Date.now() to a release with a missing/unparseable
+      // provider timestamp: that silently moves historical releases to today.
+      this.logger.warn(
+        `Skipping Finnhub calendar event without a valid release timestamp: ${eventName}`,
+      );
+      return null;
     }
 
     const surprise =
