@@ -440,7 +440,7 @@ export class TiingoMarketDataProvider implements MarketDataProvider {
     const cached = this.historyCache.get(cacheKey);
     const cacheDurations: Record<ChartTimeframe, number> = {
       M1: 60_000,
-      M3: 60_000,
+      M3: 3 * 60_000,
       M5: 5 * 60_000,
       M15: 18 * 60_000,
       M30: 60 * 60_000,
