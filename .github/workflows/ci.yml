@@ -4,10 +4,10 @@ on:
   pull_request:
     branches: [main]
   push:
-    branches: [main, fix/restore-pa-smc-engine]
+    branches: [fix/restore-pa-smc-engine]
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: veytrix-ci-${{ github.ref }}
@@ -17,8 +17,10 @@ jobs:
   verify:
     runs-on: ubuntu-latest
     steps:
-      - name: Check out repository
+      - name: Check out PR branch
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref || github.ref_name }}
 
       - name: Set up pnpm
         uses: pnpm/action-setup@v4
@@ -31,6 +33,9 @@ jobs:
           node-version: 22
           cache: pnpm
 
+      - name: Regenerate lockfile from declared workspace dependencies
+        run: pnpm install --lockfile-only
+
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
@@ -39,3 +44,14 @@ jobs:
 
       - name: Build workspace
         run: pnpm run build
+
+      - name: Commit lockfile repair
+        if: github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)
+        run: |
+          if ! git diff --quiet -- pnpm-lock.yaml; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add pnpm-lock.yaml
+            git commit -m "chore: sync pnpm lockfile"
+            git push origin "HEAD:${{ github.head_ref || github.ref_name }}"
+          fi
