@@ -8,6 +8,7 @@ import type {
   MarketNewsCategory,
 } from "@veytrix/shared";
 import type { FundamentalsProvider } from "./fundamentals-provider";
+import { parseFinnhubReleaseTime } from "./finnhub-time";
 
 /** Major FX pairs per currency for bias expansion */
 const CURRENCY_PAIRS: Record<string, string[]> = {
@@ -179,32 +180,6 @@ export class FinnhubFundamentalsProvider implements FundamentalsProvider {
       : new Date(fallbackMs).toISOString().slice(0, 10);
   }
 
-  private parseReleaseTime(value: unknown): string | null {
-    if (typeof value !== "string") return null;
-
-    const raw = value.trim();
-    if (!raw) return null;
-
-    // Finnhub calendar events commonly use "YYYY-MM-DD HH:mm:ss".
-    // Normalize timezone-less timestamps as UTC so the browser and API server
-    // agree on the release instant.
-    const withIsoSeparator = raw.replace(
-      /^(\d{4}-\d{2}-\d{2})\s+(\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?)$/,
-      "$1T$2Z",
-    );
-
-    // ISO timestamps without an explicit offset are also interpreted as UTC.
-    const normalized =
-      /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?$/.test(
-        withIsoSeparator,
-      )
-        ? `${withIsoSeparator}Z`
-        : withIsoSeparator;
-
-    const parsed = new Date(normalized);
-    return Number.isFinite(parsed.getTime()) ? parsed.toISOString() : null;
-  }
-
   private mapEvent(row: Record<string, unknown>): EconomicEvent | null {
     const eventName =
       typeof row.event === "string"
@@ -227,7 +202,7 @@ export class FinnhubFundamentalsProvider implements FundamentalsProvider {
     const estimate = this.num(row.estimate ?? row.forecast);
     const previous = this.num(row.prev ?? row.previous);
 
-    const time = this.parseReleaseTime(row.time);
+    const time = parseFinnhubReleaseTime(row.time);
     if (!time) {
       // Never assign Date.now() to a release with a missing/unparseable
       // provider timestamp: that silently moves historical releases to today.
