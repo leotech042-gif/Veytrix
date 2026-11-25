@@ -372,7 +372,14 @@ export class TiingoMarketDataProvider implements MarketDataProvider {
 
     const cacheKey = `${symbolInfo.ticker}:${timeframe}`;
     const cached = this.historyCache.get(cacheKey);
-    if (cached && Date.now() - cached.at < this.historyCacheMs) {
+    const cacheDuration = timeframe === "M3"
+      ? 60_000
+      : timeframe === "M5"
+        ? 2 * 60_000
+        : timeframe === "M15"
+          ? 5 * 60_000
+          : this.historyCacheMs;
+    if (cached && Date.now() - cached.at < cacheDuration) {
       return cached.candles;
     }
 
@@ -460,6 +467,8 @@ export class TiingoMarketDataProvider implements MarketDataProvider {
     switch (timeframe) {
       case "M1":
         return { resampleFreq: "1min", startDate: daysBack(2) };
+      case "M3":
+        return { resampleFreq: "3min", startDate: daysBack(3) };
       case "M5":
         return { resampleFreq: "5min", startDate: daysBack(5) };
       case "M15":
