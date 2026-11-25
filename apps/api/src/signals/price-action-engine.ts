@@ -67,11 +67,13 @@ export interface PriceActionInput {
   h1: MarketCandle[];
   m15: MarketCandle[];
   m5?: MarketCandle[];
+  m3?: MarketCandle[];
   now?: number;
 }
 
 const TIMEFRAME_MS: Record<ChartTimeframe, number> = {
   M1: 60_000,
+  M3: 3 * 60_000,
   M5: 5 * 60_000,
   M15: 15 * 60_000,
   M30: 30 * 60_000,
@@ -1073,15 +1075,57 @@ function describeStructure(
   };
 }
 
+type EntryTimeframe = "M15" | "M5" | "M3";
+
+/**
+ * Try the normal M15 trigger first, then refine the same HTF bias on M5
+ * and M3. The first fully confirmed setup wins; no lower-timeframe setup
+ * is allowed to reverse the H4/H1 directional bias.
+ */
 export function analysePriceAction(
   input: PriceActionInput,
+): PriceActionAnalysis {
+  const candidates: { timeframe: EntryTimeframe; candles: MarketCandle[] }[] = [
+    { timeframe: "M15", candles: input.m15 },
+    { timeframe: "M5", candles: input.m5 ?? [] },
+    { timeframe: "M3", candles: input.m3 ?? [] },
+  ];
+
+  let lastResult: PriceActionAnalysis | null = null;
+  for (const candidate of candidates) {
+    const result = analyseAtEntryTimeframe(
+      input,
+      candidate.timeframe,
+      candidate.candles,
+    );
+    if (result.setup) return result;
+    lastResult = result;
+  }
+
+  return lastResult ?? {
+    direction: "neutral",
+    confidence: 0,
+    technicalExplanation: "No entry-timeframe data was supplied.",
+    setup: null,
+  };
+}
+
+function analyseAtEntryTimeframe(
+  input: PriceActionInput,
+  entryTimeframe: EntryTimeframe,
+  entrySeries: MarketCandle[],
 ): PriceActionAnalysis {
   const now = input.now ?? Date.now();
   const d1 = completedBars(input.d1, "D1", now);
   const h4 = completedBars(input.h4, "H4", now);
   const h1 = completedBars(input.h1, "H1", now);
-  const m15 = completedBars(input.m15, "M15", now);
-  const m5 = completedBars(input.m5 ?? [], "M5", now);
+  // Keep the existing strategy calculations generic: this local series is
+  // the current entry timeframe (M15, M5 or M3).
+  const m15 = completedBars(entrySeries, entryTimeframe, now);
+  const m5 = entryTimeframe === "M15"
+    ? completedBars(input.m5 ?? [], "M5", now)
+    : [];
+  const contextM15 = completedBars(input.m15, "M15", now);
 
   const d1Structure = analyseStructure(d1);
   const h4Structure = analyseStructure(h4);
@@ -1092,7 +1136,6 @@ export function analysePriceAction(
     bias.direction === "neutral" ||
     h4Structure.direction !== bias.direction ||
     h1Structure.direction !== bias.direction ||
-    m15.length < 32 ||
     !Number.isFinite(input.price) ||
     input.price <= 0
   ) {
@@ -1105,6 +1148,18 @@ export function analysePriceAction(
   }
 
   const direction = bias.direction;
+  const minimumBars = entryTimeframe === "M15" ? 32 : 40;
+  if (m15.length < minimumBars) {
+    return {
+      direction,
+      confidence: bias.confidence,
+      technicalExplanation:
+        bias.explanation +
+        ` Only ${m15.length} completed ${entryTimeframe} candles are available; ${minimumBars} are required for a reliable entry scan.`,
+      setup: null,
+    };
+  }
+
   const atr = averageTrueRange(m15.slice(-14));
   if (atr <= 0) {
     return {
@@ -1217,7 +1272,18 @@ export function analysePriceAction(
     };
   }
 
-  const dealingRange = m15.slice(-48);
+  const dealingRange = (contextM15.length >= 12
+    ? contextM15.slice(-48)
+    : h1.slice(-12));
+  if (dealingRange.length === 0) {
+    return {
+      direction,
+      confidence: bias.confidence,
+      technicalExplanation: bias.explanation +
+        " A completed dealing range is not available to validate premium/discount.",
+      setup: null,
+    };
+  }
   const rangeHigh = Math.max(...dealingRange.map((candle) => candle.high));
   const rangeLow = Math.min(...dealingRange.map((candle) => candle.low));
   const equilibrium = (rangeHigh + rangeLow) / 2;
@@ -1272,12 +1338,12 @@ export function analysePriceAction(
 
   const reward = Math.abs(target - input.price);
   const riskReward = reward / risk;
-  if (riskReward < 5) {
+  if (!Number.isFinite(riskReward) || riskReward <= 0) {
     return {
       direction,
       confidence: bias.confidence,
       technicalExplanation: bias.explanation +
-        " The nearest opposing liquidity/first trouble area offers less than the required 1:5 reward-to-risk, so no setup is issued.",
+        " The selected opposing-liquidity target does not produce a valid positive reward distance.",
       setup: null,
     };
   }
@@ -1287,8 +1353,10 @@ export function analysePriceAction(
     input.instrument.toUpperCase().includes("JPY") ? 3 : 5;
   const round = (value: number) => Number(value.toFixed(precision));
   const sign = direction === "bullish" ? 1 : -1;
-  const takeProfit1 = round(input.price + sign * risk * 2);
-  const takeProfit2 = round(input.price + sign * risk * 3.5);
+  // Partial targets stay inside the actual external-liquidity target even
+  // when the available R multiple is below 2R or 3.5R.
+  const takeProfit1 = round(input.price + sign * reward * (1 / 3));
+  const takeProfit2 = round(input.price + sign * reward * (2 / 3));
   const takeProfit = round(target);
   const tags = [
     ...(sweep
@@ -1385,7 +1453,7 @@ export function analysePriceAction(
       riskReward: Math.round(riskReward * 10) / 10,
       riskPips: pipsFor(input.instrument, risk),
       rewardPips: pipsFor(input.instrument, reward),
-      timeframe: "M15",
+      timeframe: entryTimeframe,
       confidence,
       explanation,
       tags,
