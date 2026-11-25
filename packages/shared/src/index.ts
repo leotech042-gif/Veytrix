@@ -7,7 +7,7 @@ export type MarketCategory =
   | "synthetic"
   | "other";
 
-export type ChartTimeframe = "M1" | "M5" | "M15" | "M30" | "H1" | "H4" | "D1" | "W1";
+export type ChartTimeframe = "M1" | "M3" | "M5" | "M15" | "M30" | "H1" | "H4" | "D1" | "W1";
 
 export interface MarketInstrument {
   symbol: string;
@@ -115,7 +115,7 @@ export interface TradingSignal {
   takeProfit1?: number;
   takeProfit2?: number;
   takeProfit3?: number;
-  /** Overall R:R to final target (min ~1:5 for setups) */
+  /** Overall R:R to the final opposing-liquidity target; no fixed minimum. */
   riskReward?: number;
   riskPips?: number;
   rewardPips?: number;

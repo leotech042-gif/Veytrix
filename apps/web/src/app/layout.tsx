@@ -1,4 +1,4 @@
-import { Suspense } from "react";
+import { Suspense, type ReactNode } from "react";
 import type { Metadata } from "next";
 import { ThemeProvider, themeBootstrapScript } from "@/components/theme-provider";
 import { WorkspaceShell } from "@/components/workspace-shell";
@@ -18,7 +18,7 @@ export const metadata: Metadata = {
     "A transparent forex workspace for market data, charts, and trading tools.",
 };
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en" suppressHydrationWarning>
       <head>

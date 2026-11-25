@@ -112,7 +112,7 @@ export function SignalsPage() {
   async function runSearch() {
     const s = query.trim().toUpperCase();
     if (!s) {
-      void load();
+      setScanError("Enter an instrument symbol to run the M15 → M5 → M3 deep scan.");
       return;
     }
     setRefreshing(true);
@@ -157,7 +157,7 @@ export function SignalsPage() {
         <input
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search a pair — e.g. XAUUSD"
+          placeholder="Enter a pair for deep scan — e.g. XAUUSD"
           onKeyDown={(e) => e.key === "Enter" && void runSearch()}
         />
         <button
@@ -165,7 +165,7 @@ export function SignalsPage() {
           className="secondary-button"
           onClick={() => void runSearch()}
         >
-          Get bias
+          Deep scan
         </button>
         <button
           type="button"

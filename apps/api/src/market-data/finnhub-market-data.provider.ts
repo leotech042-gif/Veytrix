@@ -498,6 +498,7 @@ export class FinnhubMarketDataProvider implements MarketDataProvider {
 
     const resolutionMap: Record<ChartTimeframe, string> = {
       M1: "1",
+      M3: "3",
       M5: "5",
       M15: "15",
       M30: "30",
@@ -586,6 +587,7 @@ export class FinnhubMarketDataProvider implements MarketDataProvider {
   private timeframeToSeconds(tf: ChartTimeframe): number {
     const map: Record<ChartTimeframe, number> = {
       M1: 60,
+      M3: 180,
       M5: 300,
       M15: 900,
       M30: 1800,

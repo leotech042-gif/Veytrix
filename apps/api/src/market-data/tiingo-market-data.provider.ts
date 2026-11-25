@@ -20,6 +20,73 @@ type SymbolDef = {
   precision: number;
 };
 
+/**
+ * Build complete M3 bars from contiguous Tiingo M1 bars. We deliberately
+ * avoid depending on an undocumented 3min FX resample interval.
+ */
+function aggregateMinuteCandles(
+  candles: readonly MarketCandle[],
+  intervalMinutes: 3,
+): MarketCandle[] {
+  const intervalMs = intervalMinutes * 60_000;
+  const minuteMs = 60_000;
+  const buckets = new Map<number, MarketCandle[]>();
+
+  for (const candle of candles) {
+    const timestamp = Date.parse(candle.time);
+    if (
+      !Number.isFinite(timestamp) ||
+      timestamp % minuteMs !== 0 ||
+      !Number.isFinite(candle.open) ||
+      !Number.isFinite(candle.high) ||
+      !Number.isFinite(candle.low) ||
+      !Number.isFinite(candle.close) ||
+      candle.high < candle.low ||
+      candle.high < Math.max(candle.open, candle.close) ||
+      candle.low > Math.min(candle.open, candle.close)
+    ) {
+      continue;
+    }
+
+    const bucketStart = Math.floor(timestamp / intervalMs) * intervalMs;
+    const bucket = buckets.get(bucketStart) ?? [];
+    bucket.push(candle);
+    buckets.set(bucketStart, bucket);
+  }
+
+  return [...buckets.entries()]
+    .sort(([a], [b]) => a - b)
+    .flatMap(([bucketStart, bucket]) => {
+      const ordered = bucket.sort(
+        (a, b) => Date.parse(a.time) - Date.parse(b.time),
+      );
+      if (ordered.length !== intervalMinutes) return [];
+
+      const isContiguous = ordered.every(
+        (candle, index) =>
+          Date.parse(candle.time) === bucketStart + index * minuteMs,
+      );
+      if (!isContiguous) return [];
+
+      const first = ordered[0];
+      const last = ordered[ordered.length - 1];
+      const volumes = ordered.map((candle) => candle.volume);
+      const volume =
+        volumes.every((value) => typeof value === "number" && Number.isFinite(value))
+          ? volumes.reduce<number>((total, value) => total + (value ?? 0), 0)
+          : undefined;
+
+      return [{
+        time: new Date(bucketStart).toISOString(),
+        open: first.open,
+        high: Math.max(...ordered.map((candle) => candle.high)),
+        low: Math.min(...ordered.map((candle) => candle.low)),
+        close: last.close,
+        ...(volume !== undefined ? { volume } : {}),
+      }];
+    });
+}
+
 @Injectable()
 export class TiingoMarketDataProvider implements MarketDataProvider {
   private readonly logger = new Logger(TiingoMarketDataProvider.name);
@@ -34,7 +101,6 @@ export class TiingoMarketDataProvider implements MarketDataProvider {
     string,
     { at: number; candles: MarketCandle[] }
   >();
-  private readonly historyCacheMs = 15 * 60_000; // 15 minutes
 
   private readonly symbols: SymbolDef[] = [
     // Forex Majors
@@ -372,8 +438,27 @@ export class TiingoMarketDataProvider implements MarketDataProvider {
 
     const cacheKey = `${symbolInfo.ticker}:${timeframe}`;
     const cached = this.historyCache.get(cacheKey);
-    if (cached && Date.now() - cached.at < this.historyCacheMs) {
+    const cacheDurations: Record<ChartTimeframe, number> = {
+      M1: 60_000,
+      M3: 3 * 60_000,
+      M5: 5 * 60_000,
+      M15: 18 * 60_000,
+      M30: 60 * 60_000,
+      H1: 60 * 60_000,
+      H4: 4 * 60 * 60_000,
+      D1: 24 * 60 * 60_000,
+      W1: 24 * 60 * 60_000,
+    };
+    const cacheDuration = cacheDurations[timeframe];
+    if (cached && Date.now() - cached.at < cacheDuration) {
       return cached.candles;
+    }
+
+    if (timeframe === "M3") {
+      const oneMinute = await this.getHistory(instrument, "M1");
+      const candles = aggregateMinuteCandles(oneMinute, 3);
+      this.historyCache.set(cacheKey, { at: Date.now(), candles });
+      return candles;
     }
 
     const { resampleFreq, startDate } = this.historyParams(timeframe);

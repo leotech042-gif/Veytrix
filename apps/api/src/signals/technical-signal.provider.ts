@@ -122,7 +122,6 @@ export class TechnicalSignalProvider implements SignalProvider {
       );
       const marketOpen = isForexMarketOpen();
       const signals: TradingSignal[] = [];
-      const deep = Boolean(instrumentFilter);
 
       for (const symbol of symbols) {
         const quoteFromFeed = quotes.find(
@@ -166,7 +165,7 @@ export class TechnicalSignalProvider implements SignalProvider {
           if (lastClose === undefined || !Number.isFinite(lastClose)) continue;
           quote = {
             instrument: symbol,
-            asOf: new Date().toISOString(),
+            asOf: h1.length ? h1[h1.length - 1].time : new Date().toISOString(),
             last: lastClose,
             delayed: true,
           };
@@ -177,7 +176,6 @@ export class TechnicalSignalProvider implements SignalProvider {
           instrument,
           marketOpen,
           marketOpen,
-          deep,
           events,
         );
 
@@ -210,7 +208,6 @@ export class TechnicalSignalProvider implements SignalProvider {
     instrument: MarketInstrument,
     marketOpen: boolean,
     allowSetups: boolean,
-    deep: boolean,
     events: readonly EconomicEvent[],
   ): Promise<TradingSignal | null> {
     const price =
@@ -226,15 +223,16 @@ export class TechnicalSignalProvider implements SignalProvider {
         ? Math.max(0, quote.ask - quote.bid)
         : 0);
 
-    const [d1, h4, h1, m15, m5] = await Promise.all([
+    const [d1, h4, h1, m15] = await Promise.all([
       this.safeHistory(instrument.symbol, "D1"),
       this.safeHistory(instrument.symbol, "H4"),
       this.safeHistory(instrument.symbol, "H1"),
       this.safeHistory(instrument.symbol, "M15"),
-      deep ? this.safeHistory(instrument.symbol, "M5") : Promise.resolve([]),
     ]);
 
-    const analysis = analysePriceAction({
+    let m5: MarketCandle[] = [];
+    let m3: MarketCandle[] = [];
+    let analysis = analysePriceAction({
       instrument: instrument.symbol,
       price,
       spread,
@@ -242,8 +240,57 @@ export class TechnicalSignalProvider implements SignalProvider {
       h4,
       h1,
       m15,
-      m5,
     });
+
+    // Every directional watchlist bias gets lower-timeframe confirmation.
+    // M5 is checked first; M3 is requested only if M15 and M5 have no setup.
+    // This avoids silently disabling M5/M3 scanning on normal dashboard scans.
+    if (allowSetups && analysis.direction !== "neutral" && !analysis.setup) {
+      m5 = await this.safeHistory(instrument.symbol, "M5");
+      analysis = analysePriceAction({
+        instrument: instrument.symbol,
+        price,
+        spread,
+        d1,
+        h4,
+        h1,
+        m15,
+        m5,
+      });
+
+      if (analysis.direction !== "neutral" && !analysis.setup) {
+        m3 = await this.safeHistory(instrument.symbol, "M3");
+
+        // Tiingo quote snapshots can be several minutes old. Use the latest
+        // completed M3 close only when the quote timestamp is stale.
+        const now = Date.now();
+        const quoteTime = Date.parse(quote.asOf);
+        const quoteIsStale =
+          !Number.isFinite(quoteTime) || now - quoteTime > 2 * 60_000;
+        const latestClosedM3 = [...m3]
+          .filter((candle) => {
+            const openedAt = Date.parse(candle.time);
+            return Number.isFinite(openedAt) && openedAt + 3 * 60_000 <= now;
+          })
+          .sort((a, b) => Date.parse(a.time) - Date.parse(b.time))
+          .at(-1);
+        const entryPrice = quoteIsStale && latestClosedM3
+          ? latestClosedM3.close
+          : price;
+
+        analysis = analysePriceAction({
+          instrument: instrument.symbol,
+          price: entryPrice,
+          spread,
+          d1,
+          h4,
+          h1,
+          m15,
+          m5,
+          m3,
+        });
+      }
+    }
     const fundamentalExplanation = this.buildFundamentalExplanation(
       instrument.symbol,
       events,
@@ -305,7 +352,7 @@ export class TechnicalSignalProvider implements SignalProvider {
       summary:
         directionLabel +
         (marketOpen
-          ? " structure bias · no confirmed M15 entry yet."
+          ? " structure bias · no confirmed M15/M5/M3 entry yet."
           : " structure bias · market closed; no active setup."),
       technicalExplanation: analysis.technicalExplanation,
       fundamentalExplanation,

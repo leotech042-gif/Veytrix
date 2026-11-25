@@ -7,11 +7,11 @@ import { useMarketFavorites } from "./market-watch";
 import { VeytrixLoader } from "./veytrix-loader";
 
 const timeframes: ChartTimeframe[] = [
-  "M1", "M5", "M15", "M30", "H1", "H4", "D1", "W1",
+  "M1", "M3", "M5", "M15", "M30", "H1", "H4", "D1", "W1",
 ];
 
 const tradingViewIntervals: Record<ChartTimeframe, string> = {
-  M1: "1", M5: "5", M15: "15", M30: "30", H1: "60", H4: "240", D1: "D", W1: "W",
+  M1: "1", M3: "3", M5: "5", M15: "15", M30: "30", H1: "60", H4: "240", D1: "D", W1: "W",
 };
 
 const tradingViewAliases: Record<string, string> = {
@@ -308,7 +308,7 @@ export function TradingChart({
           >
             {timeframes.map((tf) => (
               <option key={tf} value={tf}>
-                {tf === "M15" ? "15m" : tf === "M30" ? "30m" : tf === "H1" ? "1H" : tf}
+                {tf === "M3" ? "3m" : tf === "M5" ? "5m" : tf === "M15" ? "15m" : tf === "M30" ? "30m" : tf === "H1" ? "1H" : tf}
               </option>
             ))}
           </select>

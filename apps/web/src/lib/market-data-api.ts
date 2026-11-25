@@ -31,7 +31,7 @@ const categories = new Set([
   "other",
 ]);
 
-const timeframes = new Set(["M1", "M5", "M15", "M30", "H1", "H4", "D1", "W1"]);
+const timeframes = new Set(["M1", "M3", "M5", "M15", "M30", "H1", "H4", "D1", "W1"]);
 
 async function getJson<T>(path: string): Promise<T> {
   const response = await fetch(`${apiUrl}${path}`, { cache: "no-store" });
