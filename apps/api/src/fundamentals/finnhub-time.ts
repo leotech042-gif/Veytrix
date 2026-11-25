@@ -12,11 +12,11 @@ export function parseFinnhubReleaseTime(value: unknown): string | null {
   if (!raw) return null;
 
   const normalizedSeparator = raw.replace(
-    /^(\\d{4}-\\d{2}-\\d{2})\\s+(\\d{2}:\\d{2}(?::\\d{2}(?:\\.\\d+)?)?)(?=Z|[+-]|$)/i,
+    /^(\d{4}-\d{2}-\d{2})\s+(\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?)(?=Z|[+-]|$)/i,
     "$1T$2",
   );
 
-  const hasExplicitOffset = /(?:Z|[+-]\\d{2}:?\\d{2})$/i.test(
+  const hasExplicitOffset = /(?:Z|[+-]\d{2}:?\d{2})$/i.test(
     normalizedSeparator,
   );
   const withTimezone = hasExplicitOffset
