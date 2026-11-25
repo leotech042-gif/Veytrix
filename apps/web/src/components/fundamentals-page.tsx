@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import type { EconomicEvent, FundamentalsStatus } from "@veytrix/shared";
-import { getEconomicCalendar, getFundamentalsStatus } from "@/lib/fundamentals-api";
+import type { EconomicEvent, FundamentalsStatus, MarketNewsArticle } from "@veytrix/shared";
+import { getEconomicCalendar, getFinancialNews, getFundamentalsStatus } from "@/lib/fundamentals-api";
 
 const CURRENCY_FLAG: Record<string, string> = {
   USD: "🇺🇸",
@@ -55,6 +55,10 @@ function shortAnalysis(ev: EconomicEvent): string {
 export function FundamentalsPage() {
   const [status, setStatus] = useState<FundamentalsStatus | null>(null);
   const [events, setEvents] = useState<EconomicEvent[]>([]);
+  const [news, setNews] = useState<MarketNewsArticle[]>([]);
+  const [newsLoading, setNewsLoading] = useState(true);
+  const [newsError, setNewsError] = useState<string | null>(null);
+  const [view, setView] = useState<"calendar" | "news">("calendar");
   const [loading, setLoading] = useState(true);
   const [impact, setImpact] = useState<"all" | "high" | "medium" | "low">("all");
   const [query, setQuery] = useState("");
@@ -87,6 +91,31 @@ export function FundamentalsPage() {
         if (!cancelled) setLoading(false);
       }
     })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    void getFinancialNews("forex")
+      .then((articles) => {
+        if (!cancelled) {
+          setNews(Array.isArray(articles) ? articles : []);
+          setNewsError(null);
+        }
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          setNews([]);
+          setNewsError(
+            error instanceof Error ? error.message : "Forex news is unavailable.",
+          );
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setNewsLoading(false);
+      });
     return () => {
       cancelled = true;
     };
@@ -135,6 +164,87 @@ export function FundamentalsPage() {
     [events, selectedId],
   );
 
+  const viewTabs = (
+    <div className="sig-filters" role="tablist" aria-label="Fundamentals views">
+      <button
+        type="button"
+        role="tab"
+        aria-selected={view === "calendar"}
+        className={`sig-filter${view === "calendar" ? " on" : ""}`}
+        onClick={() => {
+          setView("calendar");
+          setSelectedId(null);
+        }}
+      >
+        Economic calendar
+      </button>
+      <button
+        type="button"
+        role="tab"
+        aria-selected={view === "news"}
+        className={`sig-filter${view === "news" ? " on" : ""}`}
+        onClick={() => {
+          setView("news");
+          setSelectedId(null);
+        }}
+      >
+        Forex news
+      </button>
+    </div>
+  );
+
+  if (view === "news") {
+    return (
+      <div className="news-screen">
+        {viewTabs}
+        <div className="news-toolbar">
+          <strong>Latest Forex headlines</strong>
+          <span className="news-count">{news.length} articles</span>
+        </div>
+        <p className="news-sub">
+          Headlines and publisher summaries from Finnhub. Open the original source for full reporting.
+        </p>
+        {newsLoading ? <div className="home-empty">Loading Forex news…</div> : null}
+        {newsError ? <div className="inline-error" role="alert">{newsError}</div> : null}
+        {!newsLoading && !newsError && news.length === 0 ? (
+          <div className="home-empty">No Forex headlines were returned by the provider.</div>
+        ) : null}
+        {news.map((article) => {
+          const published = new Date(article.publishedAt);
+          return (
+            <a
+              key={article.id}
+              className="news-row"
+              href={article.url}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <span className="news-row-time">
+                {published.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+              </span>
+              <span className="news-row-main">
+                <span className="news-row-top">
+                  <span className="news-ccy sm">{article.source}</span>
+                  <span className="news-countdown">
+                    {published.toLocaleDateString([], { day: "numeric", month: "short" })}
+                  </span>
+                </span>
+                <strong>{article.headline}</strong>
+                {article.summary ? (
+                  <span className="news-article-summary">{article.summary}</span>
+                ) : null}
+                {article.related ? (
+                  <span className="news-article-related">Related: {article.related}</span>
+                ) : null}
+              </span>
+              <span className="chevron" aria-hidden="true">↗</span>
+            </a>
+          );
+        })}
+      </div>
+    );
+  }
+
   if (selected) {
     const when = new Date(selected.time);
     const cd = countdownLabel(selected.time, now);
@@ -143,6 +253,7 @@ export function FundamentalsPage() {
     );
     return (
       <div className="news-screen">
+        {viewTabs}
         <button
           type="button"
           className="news-back"
@@ -219,6 +330,7 @@ export function FundamentalsPage() {
 
   return (
     <div className="news-screen">
+      {viewTabs}
       <div className="news-day-nav">
         <button
           type="button"
