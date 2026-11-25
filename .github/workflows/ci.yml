@@ -7,7 +7,7 @@ on:
     branches: [fix/restore-pa-smc-engine]
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: veytrix-ci-${{ github.ref }}
@@ -51,7 +51,6 @@ jobs:
       - name: Build workspace
         run: pnpm run build
 
-      - name: Commit lockfile repair
         if: github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)
         run: |
           if ! git diff --quiet -- pnpm-lock.yaml; then
