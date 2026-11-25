@@ -177,7 +177,6 @@ export class TechnicalSignalProvider implements SignalProvider {
           instrument,
           marketOpen,
           marketOpen,
-          deep,
           events,
         );
 
@@ -210,7 +209,6 @@ export class TechnicalSignalProvider implements SignalProvider {
     instrument: MarketInstrument,
     marketOpen: boolean,
     allowSetups: boolean,
-    deep: boolean,
     events: readonly EconomicEvent[],
   ): Promise<TradingSignal | null> {
     const price =
@@ -245,41 +243,54 @@ export class TechnicalSignalProvider implements SignalProvider {
       m15,
     });
 
-    // Keep watchlist scans economical. A single-pair/deep scan requests the
-    // fast candles only when a directional HTF bias exists but M15 has no setup.
-    if (deep && allowSetups && analysis.direction !== "neutral" && !analysis.setup) {
-      [m5, m3] = await Promise.all([
-        this.safeHistory(instrument.symbol, "M5"),
-        this.safeHistory(instrument.symbol, "M3"),
-      ]);
-
-      // The bulk quote endpoint is cached for a few minutes. On a deep M3 scan,
-      // prefer the latest completed M3 close when the quote itself is stale.
-      const now = Date.now();
-      const quoteTime = Date.parse(quote.asOf);
-      const quoteIsStale = !Number.isFinite(quoteTime) || now - quoteTime > 2 * 60_000;
-      const latestClosedM3 = [...m3]
-        .filter((candle) => {
-          const openedAt = Date.parse(candle.time);
-          return Number.isFinite(openedAt) && openedAt + 3 * 60_000 <= now;
-        })
-        .sort((a, b) => Date.parse(a.time) - Date.parse(b.time))
-        .at(-1);
-      const entryPrice = quoteIsStale && latestClosedM3
-        ? latestClosedM3.close
-        : price;
-
+    // Every directional watchlist bias gets lower-timeframe confirmation.
+    // M5 is checked first; M3 is requested only if M15 and M5 have no setup.
+    // This avoids silently disabling M5/M3 scanning on normal dashboard scans.
+    if (allowSetups && analysis.direction !== "neutral" && !analysis.setup) {
+      m5 = await this.safeHistory(instrument.symbol, "M5");
       analysis = analysePriceAction({
         instrument: instrument.symbol,
-        price: entryPrice,
+        price,
         spread,
         d1,
         h4,
         h1,
         m15,
         m5,
-        m3,
       });
+
+      if (analysis.direction !== "neutral" && !analysis.setup) {
+        m3 = await this.safeHistory(instrument.symbol, "M3");
+
+        // Tiingo quote snapshots can be several minutes old. Use the latest
+        // completed M3 close only when the quote timestamp is stale.
+        const now = Date.now();
+        const quoteTime = Date.parse(quote.asOf);
+        const quoteIsStale =
+          !Number.isFinite(quoteTime) || now - quoteTime > 2 * 60_000;
+        const latestClosedM3 = [...m3]
+          .filter((candle) => {
+            const openedAt = Date.parse(candle.time);
+            return Number.isFinite(openedAt) && openedAt + 3 * 60_000 <= now;
+          })
+          .sort((a, b) => Date.parse(a.time) - Date.parse(b.time))
+          .at(-1);
+        const entryPrice = quoteIsStale && latestClosedM3
+          ? latestClosedM3.close
+          : price;
+
+        analysis = analysePriceAction({
+          instrument: instrument.symbol,
+          price: entryPrice,
+          spread,
+          d1,
+          h4,
+          h1,
+          m15,
+          m5,
+          m3,
+        });
+      }
     }
     const fundamentalExplanation = this.buildFundamentalExplanation(
       instrument.symbol,
