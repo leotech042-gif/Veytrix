@@ -2,6 +2,9 @@ import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import { SectionPage } from "@/components/section-pages";
 
+// This route is intentionally gated until the client-side session check completes.
+export const instant = false;
+
 const sections = new Set([
   "markets",
   "terminal",

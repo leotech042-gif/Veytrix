@@ -1,4 +1,10 @@
-import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
+import {
+  Inject,
+  Injectable,
+  Logger,
+  OnModuleDestroy,
+  OnModuleInit,
+} from "@nestjs/common";
 import type { TradingSignal } from "@veytrix/shared";
 import { FundamentalsService } from "../fundamentals/fundamentals.service";
 import { MarketDataService } from "../market-data/market-data.service";
@@ -37,9 +43,11 @@ export class AlertsScanner implements OnModuleInit, OnModuleDestroy {
   ];
 
   constructor(
-    private readonly hub: AlertsHub,
-    private readonly signals: SignalsService,
+    @Inject(AlertsHub) private readonly hub: AlertsHub,
+    @Inject(SignalsService) private readonly signals: SignalsService,
+    @Inject(FundamentalsService)
     private readonly fundamentals: FundamentalsService,
+    @Inject(MarketDataService)
     private readonly marketData: MarketDataService,
   ) {}
 

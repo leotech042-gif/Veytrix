@@ -13,7 +13,6 @@ import type { FundamentalsProvider } from "./fundamentals-provider";
  */
 const FEEDS = [
   "https://nfs.faireconomy.media/ff_calendar_thisweek.json",
-  "https://nfs.faireconomy.media/ff_calendar_nextweek.json",
 ] as const;
 
 const CURRENCY_PAIRS: Record<string, string[]> = {
@@ -57,7 +56,7 @@ export class FfCalendarFundamentalsProvider implements FundamentalsProvider {
     return {
       state: "connected",
       provider: "Forex Factory Calendar",
-      message: "Live economic calendar · this week + next week",
+      message: "Live economic calendar · current week",
       updatedAt: new Date().toISOString(),
     };
   }
