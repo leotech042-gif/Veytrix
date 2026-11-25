@@ -34,7 +34,6 @@ export class TiingoMarketDataProvider implements MarketDataProvider {
     string,
     { at: number; candles: MarketCandle[] }
   >();
-  private readonly historyCacheMs = 15 * 60_000; // 15 minutes
 
   private readonly symbols: SymbolDef[] = [
     // Forex Majors
@@ -372,13 +371,17 @@ export class TiingoMarketDataProvider implements MarketDataProvider {
 
     const cacheKey = `${symbolInfo.ticker}:${timeframe}`;
     const cached = this.historyCache.get(cacheKey);
-    const cacheDuration = timeframe === "M3"
-      ? 60_000
-      : timeframe === "M5"
-        ? 2 * 60_000
-        : timeframe === "M15"
-          ? 5 * 60_000
-          : this.historyCacheMs;
+    const cacheDuration: Record<ChartTimeframe, number> = {
+      M1: 60_000,
+      M3: 3 * 60_000,
+      M5: 5 * 60_000,
+      M15: 18 * 60_000,
+      M30: 60 * 60_000,
+      H1: 60 * 60_000,
+      H4: 4 * 60 * 60_000,
+      D1: 24 * 60 * 60_000,
+      W1: 24 * 60 * 60_000,
+    }[timeframe];
     if (cached && Date.now() - cached.at < cacheDuration) {
       return cached.candles;
     }
