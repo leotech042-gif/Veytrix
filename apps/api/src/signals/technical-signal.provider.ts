@@ -122,7 +122,6 @@ export class TechnicalSignalProvider implements SignalProvider {
       );
       const marketOpen = isForexMarketOpen();
       const signals: TradingSignal[] = [];
-      const deep = Boolean(instrumentFilter);
 
       for (const symbol of symbols) {
         const quoteFromFeed = quotes.find(
