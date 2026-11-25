@@ -39,6 +39,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Build shared workspace package
+        run: pnpm --filter @veytrix/shared build
+
       - name: Type-check workspace
         run: pnpm run typecheck
 
