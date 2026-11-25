@@ -1322,7 +1322,7 @@ function analyseAtEntryTimeframe(
   const target = nearestOpposingLiquidity(
     [h1, h4],
     d1,
-    m15,
+    contextM15,
     direction,
     input.price,
   );
