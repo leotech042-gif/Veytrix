@@ -4,6 +4,8 @@ import type {
   EconomicImpact,
   FundDirection,
   FundamentalsStatus,
+  MarketNewsArticle,
+  MarketNewsCategory,
 } from "@veytrix/shared";
 import type { FundamentalsProvider } from "./fundamentals-provider";
 
@@ -34,8 +36,10 @@ export class FinnhubFundamentalsProvider implements FundamentalsProvider {
   private readonly logger = new Logger(FinnhubFundamentalsProvider.name);
   private readonly apiKey = process.env.FINNHUB_API_KEY?.trim();
   private readonly baseUrl = "https://finnhub.io/api/v1";
-  private cache: { at: number; events: EconomicEvent[] } | null = null;
-  private readonly cacheMs = 20 * 60_000;
+  private readonly calendarCache = new Map<string, { at: number; events: EconomicEvent[] }>();
+  private readonly newsCache = new Map<MarketNewsCategory, { at: number; articles: MarketNewsArticle[] }>();
+  private readonly calendarCacheMs = 20 * 60_000;
+  private readonly newsCacheMs = 5 * 60_000;
 
   getStatus(): FundamentalsStatus {
     if (!this.apiKey) {
@@ -60,48 +64,119 @@ export class FinnhubFundamentalsProvider implements FundamentalsProvider {
   ): Promise<readonly EconomicEvent[]> {
     if (!this.apiKey) return [];
 
-    if (this.cache && Date.now() - this.cache.at < this.cacheMs) {
-      return this.cache.events;
-    }
-
-    const start =
-      from ??
-      new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
-    const end =
-      to ??
-      new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    const now = Date.now();
+    const start = this.dateOnly(from, now - 2 * 24 * 60 * 60_000);
+    const end = this.dateOnly(to, now + 7 * 24 * 60 * 60_000);
+    const cacheKey = `${start}:${end}`;
+    const cached = this.calendarCache.get(cacheKey);
+    if (cached && now - cached.at < this.calendarCacheMs) return cached.events;
 
     try {
-      const url = `${this.baseUrl}/calendar/economic?from=${start}&to=${end}&token=${this.apiKey}`;
+      const url = new URL(`${this.baseUrl}/calendar/economic`);
+      url.searchParams.set("from", start);
+      url.searchParams.set("to", end);
+      url.searchParams.set("token", this.apiKey);
       const res = await fetch(url);
       if (!res.ok) {
         this.logger.warn(`Finnhub calendar HTTP ${res.status}`);
-        return this.cache?.events ?? [];
+        return cached?.events ?? [];
       }
 
       const body = (await res.json()) as {
         economicCalendar?: Array<Record<string, unknown>>;
       };
-      const raw = Array.isArray(body.economicCalendar)
-        ? body.economicCalendar
-        : [];
-
+      const raw = Array.isArray(body.economicCalendar) ? body.economicCalendar : [];
+      const startMs = Date.parse(`${start}T00:00:00.000Z`);
+      const endMs = Date.parse(`${end}T23:59:59.999Z`);
       const events = raw
         .map((row) => this.mapEvent(row))
-        .filter((e): e is EconomicEvent => e !== null)
-        .sort(
-          (a, b) => new Date(a.time).getTime() - new Date(b.time).getTime(),
-        );
+        .filter((event): event is EconomicEvent => {
+          if (!event) return false;
+          const time = Date.parse(event.time);
+          return Number.isFinite(time) && time >= startMs && time <= endMs;
+        })
+        .sort((a, b) => Date.parse(a.time) - Date.parse(b.time));
 
-      this.cache = { at: Date.now(), events };
+      this.calendarCache.set(cacheKey, { at: now, events });
+      if (this.calendarCache.size > 8) {
+        const oldest = this.calendarCache.keys().next().value;
+        if (oldest) this.calendarCache.delete(oldest);
+      }
       return events;
     } catch (err) {
       this.logger.warn(
         "Finnhub calendar failed",
         err instanceof Error ? err.message : err,
       );
-      return this.cache?.events ?? [];
+      return cached?.events ?? [];
     }
+  }
+
+  async getNews(category: MarketNewsCategory): Promise<readonly MarketNewsArticle[]> {
+    if (!this.apiKey) return [];
+    const now = Date.now();
+    const cached = this.newsCache.get(category);
+    if (cached && now - cached.at < this.newsCacheMs) return cached.articles;
+
+    try {
+      const url = new URL(`${this.baseUrl}/news`);
+      url.searchParams.set("category", category);
+      url.searchParams.set("token", this.apiKey);
+      const res = await fetch(url);
+      if (!res.ok) {
+        this.logger.warn(`Finnhub ${category} news HTTP ${res.status}`);
+        return cached?.articles ?? [];
+      }
+
+      const body: unknown = await res.json();
+      if (!Array.isArray(body)) return cached?.articles ?? [];
+      const articles = body.flatMap((item): MarketNewsArticle[] => {
+        if (typeof item !== "object" || item === null) return [];
+        const row = item as Record<string, unknown>;
+        const headline = typeof row.headline === "string" ? row.headline.trim() : "";
+        const articleUrl = typeof row.url === "string" ? row.url.trim() : "";
+        const published = Number(row.datetime);
+        if (
+          !headline ||
+          !articleUrl ||
+          !/^https?:\/\//i.test(articleUrl) ||
+          !Number.isFinite(published) ||
+          published <= 0
+        ) return [];
+
+        return [{
+          id: String(row.id ?? `${published}-${headline}`),
+          category,
+          publishedAt: new Date(published * 1000).toISOString(),
+          headline,
+          summary: typeof row.summary === "string" ? row.summary.trim() : "",
+          source: typeof row.source === "string" ? row.source.trim() : "Finnhub",
+          url: articleUrl,
+          ...(typeof row.image === "string" && /^https?:\/\//i.test(row.image)
+            ? { image: row.image }
+            : {}),
+          ...(typeof row.related === "string" && row.related.trim()
+            ? { related: row.related.trim() }
+            : {}),
+        }];
+      }).sort((a, b) => Date.parse(b.publishedAt) - Date.parse(a.publishedAt));
+
+      this.newsCache.set(category, { at: now, articles });
+      return articles;
+    } catch (err) {
+      this.logger.warn(
+        `Finnhub ${category} news request failed`,
+        err instanceof Error ? err.message : err,
+      );
+      return cached?.articles ?? [];
+    }
+  }
+
+  private dateOnly(value: string | undefined, fallbackMs: number): string {
+    const parsed = value ? new Date(value) : new Date(fallbackMs);
+    return Number.isFinite(parsed.getTime())
+      ? parsed.toISOString().slice(0, 10)
+      : new Date(fallbackMs).toISOString().slice(0, 10);
   }
 
   private mapEvent(row: Record<string, unknown>): EconomicEvent | null {
@@ -232,8 +307,16 @@ export class FinnhubFundamentalsProvider implements FundamentalsProvider {
 
   private num(value: unknown): number | null {
     if (value === null || value === undefined || value === "") return null;
-    const n = typeof value === "number" ? value : Number(value);
-    return Number.isFinite(n) ? n : null;
+    if (typeof value === "number") return Number.isFinite(value) ? value : null;
+    const raw = String(value).trim().replace(/,/g, "");
+    if (!raw || /^(?:n\/a|na|-)$/i.test(raw)) return null;
+    const match = raw.match(/^([-+]?(?:\d+\.?\d*|\.\d+))\s*([KMB])?%?$/i);
+    if (!match) return null;
+    const base = Number(match[1]);
+    const suffix = match[2]?.toUpperCase();
+    const multiplier = suffix === "K" ? 1e3 : suffix === "M" ? 1e6 : suffix === "B" ? 1e9 : 1;
+    const result = base * multiplier;
+    return Number.isFinite(result) ? result : null;
   }
 
   /**
