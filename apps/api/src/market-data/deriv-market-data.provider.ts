@@ -351,7 +351,7 @@ export class DerivMarketDataProvider implements MarketDataProvider {
 
   private getWebSocket(): (typeof WebSocket) | null {
     if (typeof WebSocket !== "undefined") return WebSocket;
-    const g = globalThis as { WebSocket?: typeof WebSocket };
+    const g = globalThis as unknown as { WebSocket?: typeof WebSocket };
     return g.WebSocket ?? null;
   }
 }
