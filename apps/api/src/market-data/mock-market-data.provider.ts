@@ -156,6 +156,7 @@ export class MockMarketDataProvider implements MarketDataProvider {
   private timeframeToMs(tf: ChartTimeframe): number {
     const map: Record<ChartTimeframe, number> = {
       M1: 60_000,
+      M3: 3 * 60_000,
       M5: 5 * 60_000,
       M15: 15 * 60_000,
       M30: 30 * 60_000,
