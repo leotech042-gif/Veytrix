@@ -308,7 +308,7 @@ export function TradingChart({
           >
             {timeframes.map((tf) => (
               <option key={tf} value={tf}>
-                {tf === "M15" ? "15m" : tf === "M30" ? "30m" : tf === "H1" ? "1H" : tf}
+                {tf === "M3" ? "3m" : tf === "M5" ? "5m" : tf === "M15" ? "15m" : tf === "M30" ? "30m" : tf === "H1" ? "1H" : tf}
               </option>
             ))}
           </select>
