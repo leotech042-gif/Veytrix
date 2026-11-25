@@ -19,10 +19,9 @@ export function parseFinnhubReleaseTime(value: unknown): string | null {
   const hasExplicitOffset = /(?:Z|[+-]\\d{2}:?\\d{2})$/i.test(
     normalizedSeparator,
   );
-  const iso = /T/i.test(normalizedSeparator)
+  const withTimezone = hasExplicitOffset
     ? normalizedSeparator
-    : normalizedSeparator;
-  const withTimezone = hasExplicitOffset ? iso : `${iso}Z`;
+    : `${normalizedSeparator}Z`;
   const parsed = new Date(withTimezone);
 
   return Number.isFinite(parsed.getTime()) ? parsed.toISOString() : null;
