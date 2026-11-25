@@ -92,6 +92,20 @@ export interface EconomicEvent {
   affectedPairs: AffectedPair[];
 }
 
+export type MarketNewsCategory = "forex" | "general";
+
+export interface MarketNewsArticle {
+  id: string;
+  category: MarketNewsCategory;
+  publishedAt: string;
+  headline: string;
+  summary: string;
+  source: string;
+  url: string;
+  image?: string;
+  related?: string;
+}
+
 export type SignalDirection = "bullish" | "bearish" | "neutral";
 
 export interface TradingSignal {

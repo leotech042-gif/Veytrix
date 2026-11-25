@@ -1,4 +1,4 @@
-import type { EconomicEvent, FundamentalsStatus } from "@veytrix/shared";
+import type { EconomicEvent, FundamentalsStatus, MarketNewsArticle, MarketNewsCategory } from "@veytrix/shared";
 
 export class FundamentalsApiError extends Error {
   constructor(message: string) {
@@ -35,4 +35,11 @@ export function getEconomicCalendar(
   return getJson<EconomicEvent[]>(
     `/fundamentals/calendar${qs ? `?${qs}` : ""}`,
   );
+}
+
+export function getFinancialNews(
+  category: MarketNewsCategory = "forex",
+): Promise<MarketNewsArticle[]> {
+  const q = new URLSearchParams({ category });
+  return getJson<MarketNewsArticle[]>(`/fundamentals/news?${q.toString()}`);
 }
