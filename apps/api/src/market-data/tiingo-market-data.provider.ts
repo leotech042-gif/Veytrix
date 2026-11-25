@@ -438,7 +438,7 @@ export class TiingoMarketDataProvider implements MarketDataProvider {
 
     const cacheKey = `${symbolInfo.ticker}:${timeframe}`;
     const cached = this.historyCache.get(cacheKey);
-    const cacheDuration: Record<ChartTimeframe, number> = {
+    const cacheDurations: Record<ChartTimeframe, number> = {
       M1: 60_000,
       M3: 60_000,
       M5: 5 * 60_000,
@@ -448,7 +448,8 @@ export class TiingoMarketDataProvider implements MarketDataProvider {
       H4: 4 * 60 * 60_000,
       D1: 24 * 60 * 60_000,
       W1: 24 * 60 * 60_000,
-    }[timeframe];
+    };
+    const cacheDuration = cacheDurations[timeframe];
     if (cached && Date.now() - cached.at < cacheDuration) {
       return cached.candles;
     }
