@@ -10,6 +10,7 @@ import { MarketDataService } from "./market-data.service";
 
 const timeframes = new Set<string>([
   "M1",
+  "M3",
   "M5",
   "M15",
   "M30",
@@ -58,7 +59,7 @@ export class MarketDataController {
       throw new BadRequestException({
         code: "INVALID_HISTORY_QUERY",
         message:
-          "Provide a valid instrument symbol and timeframe (M1, M5, M15, M30, H1, H4, D1, or W1).",
+          "Provide a valid instrument symbol and timeframe (M1, M3, M5, M15, M30, H1, H4, D1, or W1).",
       });
     }
 
