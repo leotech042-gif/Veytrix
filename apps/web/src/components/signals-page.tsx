@@ -165,7 +165,7 @@ export function SignalsPage() {
           className="secondary-button"
           onClick={() => void runSearch()}
         >
-          Get bias
+          Deep scan
         </button>
         <button
           type="button"
