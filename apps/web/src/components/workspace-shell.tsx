@@ -224,11 +224,6 @@ function ShellInner({ children }: { children: React.ReactNode }) {
     visibleConnection.kind === "ready" &&
     visibleConnection.status.state === "connected" &&
     !visibleConnection.status.delayed;
-
-  if (pathname === "/login") {
-    return <>{children}</>;
-  }
-
   const onChart = pathname.startsWith("/charts");
   const isSettings = pathname.startsWith("/settings");
   const showSideRoom = !onChart && !isSettings;
@@ -236,6 +231,10 @@ function ShellInner({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     setPanelCollapsed(onChart || isSettings);
   }, [pathname, onChart, isSettings]);
+
+  if (pathname === "/login") {
+    return <>{children}</>;
+  }
 
   return (
     <div className="app-shell vx-shell">
@@ -299,7 +298,7 @@ function ShellInner({ children }: { children: React.ReactNode }) {
           ) : null}
         </div>
 
-        <nav className="mobile-bottom-nav mt5-nav" aria-label="Primary">
+        <nav className={`mobile-bottom-nav mt5-nav${isSettings ? " settings-hidden" : ""}`} aria-label="Primary">
           {bottomNav.map((item) => {
             const active = pathname.startsWith(item.href);
             const isChart = item.href === "/charts";
