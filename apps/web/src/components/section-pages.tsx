@@ -1,15 +1,13 @@
 "use client";
 
 import { useState } from "react";
+import type { ThemePreference } from "./theme-provider";
+import { useHydrated, usePreferences } from "./theme-provider";
 import { MarketWatch, useMarketFeed } from "./market-watch";
 import { TradingChart } from "./trading-chart";
-import {
-  useHydrated,
-  usePreferences,
-  type ThemePreference,
-} from "./theme-provider";
 import { SignalsPage } from "./signals-page";
 import { FundamentalsPage } from "./fundamentals-page";
+import { Dashboard } from "./dashboard";
 
 export function SectionPage({
   section,
@@ -18,28 +16,33 @@ export function SectionPage({
   section: string;
   symbol?: string;
 }) {
-  const feed = useMarketFeed();
-
+  if (section === "markets") return <MarketWatch />;
+  if (section === "charts") {
+    return <ChartsSection symbol={symbol} />;
+  }
   if (section === "signals") return <SignalsPage />;
   if (section === "fundamentals") return <FundamentalsPage />;
   if (section === "settings") return <SettingsPage />;
   if (section === "faq") return <FaqPage />;
-
-  if (section === "markets") {
-    return <MarketWatch feed={feed} />;
-  }
-
-  if (section === "charts") {
+  if (section === "privacy" || section === "terms" || section === "risk-disclosure") {
     return (
-      <TradingChart instruments={feed.instruments} initialInstrument={symbol} />
+      <div className="page-heading">
+        <h1>{section}</h1>
+        <p className="home-empty">Legal copy is managed separately.</p>
+      </div>
     );
   }
+  return <Dashboard />;
+}
 
-  if (section === "terminal") {
-    return <div className="home-empty">No closed history yet</div>;
-  }
-
-  return <div className="home-empty">Not configured</div>;
+function ChartsSection({ symbol }: { symbol: string }) {
+  const feed = useMarketFeed();
+  return (
+    <TradingChart
+      instruments={feed.instruments}
+      initialInstrument={symbol}
+    />
+  );
 }
 
 function SettingsPage() {
@@ -135,8 +138,8 @@ function SettingsPage() {
         <div className="set-row">
           <span className="set-ico">◐</span>
           <div className="set-body">
-            <strong>Theme</strong>
-            <span>Light / dark / system</span>
+            <strong>App theme</strong>
+            <span>Shell only — does not change chart</span>
           </div>
           <div className="segmented-control" role="group">
             {(["light", "dark", "system"] as ThemePreference[]).map((theme) => (
@@ -153,6 +156,39 @@ function SettingsPage() {
                 {theme[0].toUpperCase() + theme.slice(1)}
               </button>
             ))}
+          </div>
+        </div>
+        <div className="set-row">
+          <span className="set-ico">▣</span>
+          <div className="set-body">
+            <strong>Chart color</strong>
+            <span>Independent of app theme</span>
+          </div>
+          <div className="segmented-control" role="group">
+            <button
+              type="button"
+              className={
+                (hydrated ? preferences.chartBackground : "#ffffff") ===
+                "#ffffff"
+                  ? "selected"
+                  : ""
+              }
+              onClick={() => updatePreferences({ chartBackground: "#ffffff" })}
+            >
+              White
+            </button>
+            <button
+              type="button"
+              className={
+                (hydrated ? preferences.chartBackground : "#ffffff") ===
+                "#0e141d"
+                  ? "selected"
+                  : ""
+              }
+              onClick={() => updatePreferences({ chartBackground: "#0e141d" })}
+            >
+              Dark
+            </button>
           </div>
         </div>
         <div className="set-row">
@@ -179,28 +215,21 @@ function SettingsPage() {
 }
 
 function FaqPage() {
-  const items = [
-    {
-      q: "Where do quotes come from?",
-      a: "From the configured market-data provider on the API (e.g. Tiingo).",
-    },
-    {
-      q: "Does Veytrix place trades?",
-      a: "No. It shows research and signals only. No broker credentials are collected for order routing.",
-    },
-    {
-      q: "Why is a setup CLOSED?",
-      a: "When the market session is closed or the engine marks the setup inactive.",
-    },
-  ];
   return (
-    <section className="faq-list">
-      {items.map((item) => (
-        <details key={item.q}>
-          <summary>{item.q}</summary>
-          <p>{item.a}</p>
-        </details>
-      ))}
-    </section>
+    <div className="page-heading">
+      <h1>FAQ</h1>
+      <div className="set-card">
+        <p>
+          <strong>Does Veytrix place trades?</strong>
+          <br />
+          No. Signals and charts are for analysis only.
+        </p>
+        <p>
+          <strong>Where does market data come from?</strong>
+          <br />
+          From the linked Veytrix API / provider status on Settings.
+        </p>
+      </div>
+    </div>
   );
 }
