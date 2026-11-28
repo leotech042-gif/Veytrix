@@ -315,10 +315,18 @@
 
   .vx-body.with-room .vx-room-pane {
     flex: 0 0 min(420px, 38vw);
+    width: min(420px, 38vw);
     max-width: 480px;
     min-width: 280px;
     overflow-y: auto;
-    transition: flex-basis .2s ease, opacity .16s ease;
+    opacity: 1;
+    transition:
+      flex-basis .22s ease,
+      width .22s ease,
+      min-width .22s ease,
+      max-width .22s ease,
+      padding .22s ease,
+      opacity .16s ease;
   }
 
   .vx-body.with-room .vx-chart-pane.desktop-pane {
@@ -331,7 +339,15 @@
   }
 
   .vx-body.room-collapsed .vx-room-pane {
-    display: none;
+    flex: 0 0 0;
+    width: 0;
+    min-width: 0;
+    max-width: 0;
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+    overflow: hidden;
+    opacity: 0;
+    pointer-events: none;
   }
 
   .vx-body.settings-fullscreen {
