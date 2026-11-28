@@ -7,9 +7,10 @@ import {
   useEffect,
   useMemo,
   useState,
-  useSyncExternalStore,
   type ReactNode,
 } from "react";
+
+const STORAGE_KEY = "veytrix.preferences";
 
 export type ThemePreference = "light" | "dark" | "system";
 
@@ -26,12 +27,10 @@ export interface UserPreferences {
   showVolume: boolean;
 }
 
-const STORAGE_KEY = "veytrix.preferences.v1";
-
 const defaults: UserPreferences = {
   theme: "system",
   defaultTimeframe: "H1",
-  chartBackground: "#0e141d",
+  chartBackground: "#ffffff",
   bullishColor: "#8bd878",
   bearishColor: "#ed7777",
   accentColor: "#c6f36b",
@@ -52,81 +51,88 @@ function isThemePreference(value: unknown): value is ThemePreference {
   return value === "light" || value === "dark" || value === "system";
 }
 
+function color(value: unknown, fallback: string): string {
+  return typeof value === "string" && /^#[0-9a-fA-F]{6}$/.test(value)
+    ? value
+    : fallback;
+}
+
 function parsePreferences(stored: string | null): UserPreferences {
   if (!stored) return defaults;
   try {
-    const value: unknown = JSON.parse(stored);
+    const value = JSON.parse(stored) as unknown;
     if (typeof value !== "object" || value === null) return defaults;
-
     const candidate = value as Partial<UserPreferences>;
-    const color = (value: string | undefined, fallback: string) =>
-      typeof value === "string" && /^#[\da-f]{6}$/i.test(value)
-        ? value
-        : fallback;
     return {
       theme: isThemePreference(candidate.theme)
         ? candidate.theme
         : defaults.theme,
       defaultTimeframe:
-        candidate.defaultTimeframe && [
-          "M1",
-          "M5",
-          "M15",
-          "M30",
-          "H1",
-          "H4",
-          "D1",
-          "W1",
-        ].includes(candidate.defaultTimeframe)
+        candidate.defaultTimeframe &&
+        ["M1", "M5", "M15", "M30", "H1", "H4", "D1", "W1"].includes(
+          candidate.defaultTimeframe,
+        )
           ? candidate.defaultTimeframe
           : defaults.defaultTimeframe,
-      chartBackground: color(
-        candidate.chartBackground,
-        defaults.chartBackground,
-      ),
+      chartBackground: color(candidate.chartBackground, defaults.chartBackground),
       bullishColor: color(candidate.bullishColor, defaults.bullishColor),
       bearishColor: color(candidate.bearishColor, defaults.bearishColor),
       accentColor: color(candidate.accentColor, defaults.accentColor),
       defaultInstrument:
-        typeof candidate.defaultInstrument === "string" &&
-        candidate.defaultInstrument.length <= 40
+        typeof candidate.defaultInstrument === "string"
           ? candidate.defaultInstrument
           : defaults.defaultInstrument,
-      showSma:
-        typeof candidate.showSma === "boolean"
-          ? candidate.showSma
-          : defaults.showSma,
-      showEma:
-        typeof candidate.showEma === "boolean"
-          ? candidate.showEma
-          : defaults.showEma,
-      showVolume:
-        typeof candidate.showVolume === "boolean"
-          ? candidate.showVolume
-          : defaults.showVolume,
+      showSma: Boolean(candidate.showSma),
+      showEma: Boolean(candidate.showEma),
+      showVolume: Boolean(candidate.showVolume),
     };
-  } catch (error) {
-    console.warn("Unable to read saved Veytrix preferences.", error);
+  } catch {
     return defaults;
   }
 }
 
 function readPreferences(): UserPreferences {
+  if (typeof window === "undefined") return defaults;
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    return parsePreferences(raw);
-  } catch (error) {
-    console.warn("Unable to read saved Veytrix preferences.", error);
+    return parsePreferences(window.localStorage.getItem(STORAGE_KEY));
+  } catch {
     return defaults;
   }
 }
 
-function resolveTheme(theme: ThemePreference): "light" | "dark" {
-  if (theme !== "system") return theme;
-  return window.matchMedia("(prefers-color-scheme: dark)").matches
-    ? "dark"
-    : "light";
+function writePreferences(preferences: UserPreferences) {
+  try {
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(preferences));
+  } catch {
+    /* ignore */
+  }
 }
+
+function resolveTheme(theme: ThemePreference): "light" | "dark" {
+  if (theme === "system") {
+    return window.matchMedia("(prefers-color-scheme: dark)").matches
+      ? "dark"
+      : "light";
+  }
+  return theme;
+}
+
+export const themeBootstrapScript = `
+(function(){
+  try {
+    var raw = localStorage.getItem("${STORAGE_KEY}");
+    var theme = "system";
+    if (raw) {
+      var p = JSON.parse(raw);
+      if (p && (p.theme === "light" || p.theme === "dark" || p.theme === "system")) theme = p.theme;
+    }
+    var resolved = theme === "system"
+      ? (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light")
+      : theme;
+    document.documentElement.dataset.theme = resolved;
+  } catch (e) {}
+})();
+`;
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const [preferences, setPreferences] = useState(defaults);
@@ -134,50 +140,28 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let active = true;
-    const timer = window.setTimeout(() => {
-      if (!active) return;
-      setPreferences(readPreferences());
-      setReady(true);
-    }, 0);
-    const handleStorage = () => {
-      if (active) setPreferences(readPreferences());
-    };
-    window.addEventListener("storage", handleStorage);
-
+    setPreferences(readPreferences());
+    setReady(true);
     return () => {
       active = false;
-      window.clearTimeout(timer);
-      window.removeEventListener("storage", handleStorage);
     };
   }, []);
 
   useEffect(() => {
+    if (!ready) return;
+    writePreferences(preferences);
     const applyTheme = () => {
       document.documentElement.dataset.theme = resolveTheme(preferences.theme);
     };
-
     applyTheme();
     const media = window.matchMedia("(prefers-color-scheme: dark)");
     media.addEventListener("change", applyTheme);
     return () => media.removeEventListener("change", applyTheme);
-  }, [preferences.theme]);
-
-  useEffect(() => {
-    if (!ready) return;
-    document.documentElement.style.setProperty("--accent", preferences.accentColor);
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(preferences));
-    } catch (error) {
-      console.warn("Unable to save Veytrix preferences.", error);
-    }
   }, [preferences, ready]);
 
-  const updatePreferences = useCallback(
-    (patch: Partial<UserPreferences>) => {
-      setPreferences((current) => ({ ...current, ...patch }));
-    },
-    [],
-  );
+  const updatePreferences = useCallback((patch: Partial<UserPreferences>) => {
+    setPreferences((current) => ({ ...current, ...patch }));
+  }, []);
 
   const value = useMemo(
     () => ({ preferences, updatePreferences }),
@@ -196,20 +180,7 @@ export function usePreferences(): ThemeContextValue {
 }
 
 export function useHydrated(): boolean {
-  return useSyncExternalStore(
-    () => () => undefined,
-    () => true,
-    () => false,
-  );
+  const [hydrated, setHydrated] = useState(false);
+  useEffect(() => setHydrated(true), []);
+  return hydrated;
 }
-
-export const themeBootstrapScript = `try {
-  const saved = localStorage.getItem("${STORAGE_KEY}");
-  const prefs = saved ? JSON.parse(saved) : null;
-  const theme = prefs && ["light", "dark", "system"].includes(prefs.theme) ? prefs.theme : "system";
-  document.documentElement.dataset.theme = theme === "system"
-    ? (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light")
-    : theme;
-} catch (error) {
-  console.warn("Unable to apply saved Veytrix theme.", error);
-}`;
