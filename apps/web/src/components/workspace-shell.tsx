@@ -29,9 +29,6 @@ const roomItems = [
   { href: "/markets", label: "Markets", icon: "≋" },
   { href: "/signals", label: "Signals", icon: "⌁" },
   { href: "/fundamentals", label: "News & fundamentals", icon: "▤" },
-  { href: "/terminal", label: "Terminal", icon: ">_" },
-  { href: "/history", label: "History", icon: "◷" },
-  { href: "/assistant", label: "Assistant", icon: "✧" },
   { href: "/faq", label: "Help", icon: "?" },
 ] as const;
 
