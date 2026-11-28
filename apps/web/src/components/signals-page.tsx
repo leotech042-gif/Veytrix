@@ -50,7 +50,7 @@ function fmt(n: number | undefined | null): string {
 }
 
 function extraField(signal: TradingSignal, key: string): string | undefined {
-  const v = (signal as Record<string, unknown>)[key];
+  const v = (signal as unknown as Record<string, unknown>)[key];
   return typeof v === "string" && v.trim() ? v.trim() : undefined;
 }
 
