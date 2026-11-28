@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { getMarketStatus } from "@/lib/market-data-api";
 import type { MarketDataStatus } from "@veytrix/shared";
 import { ThemeToggle } from "./theme-toggle";
@@ -13,6 +13,7 @@ import {
 } from "./notifications";
 import { TradingChart } from "./trading-chart";
 import { useMarketFeed } from "./market-watch";
+import { VeytrixLoader } from "./veytrix-loader";
 
 const navItems = [
   { href: "/charts", label: "Chart" },
@@ -111,6 +112,44 @@ function connectionLabel(state: StatusState): string {
   return "Not set";
 }
 
+/** Glowing loader on every route change (+ offline) */
+function RouteGlowLoader() {
+  const pathname = usePathname();
+  const [visible, setVisible] = useState(false);
+  const [offline, setOffline] = useState(false);
+  const first = useRef(true);
+
+  useEffect(() => {
+    const sync = () => setOffline(typeof navigator !== "undefined" && !navigator.onLine);
+    sync();
+    window.addEventListener("online", sync);
+    window.addEventListener("offline", sync);
+    return () => {
+      window.removeEventListener("online", sync);
+      window.removeEventListener("offline", sync);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (first.current) {
+      first.current = false;
+      return;
+    }
+    setVisible(true);
+    const t = window.setTimeout(() => setVisible(false), 700);
+    return () => window.clearTimeout(t);
+  }, [pathname]);
+
+  if (!visible && !offline) return null;
+
+  return (
+    <VeytrixLoader
+      variant="fullscreen"
+      label={offline ? "No connection…" : "Loading…"}
+    />
+  );
+}
+
 function ShellInner({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const connection = useMarketConnection();
@@ -127,11 +166,11 @@ function ShellInner({ children }: { children: React.ReactNode }) {
   }
 
   const onChart = pathname.startsWith("/charts");
-  /** Desktop: chart stays; other rooms open beside it */
   const showSideRoom = !onChart;
 
   return (
     <div className="app-shell vx-shell">
+      <RouteGlowLoader />
       <div className="workspace-main">
         <header className="topbar vx-topbar">
           <div className="vx-top-left">
@@ -145,7 +184,6 @@ function ShellInner({ children }: { children: React.ReactNode }) {
             </span>
           </div>
 
-          {/* Nav sits on the RIGHT with theme + notifications */}
           <div className="vx-top-right">
             <nav className="vx-top-nav" aria-label="Workspace">
               {navItems.map((item) => {
@@ -168,7 +206,6 @@ function ShellInner({ children }: { children: React.ReactNode }) {
         </header>
 
         <div className={`vx-body${showSideRoom ? " with-room" : ""}`}>
-          {/* Chart always on desktop when a side room is open */}
           {showSideRoom ? (
             <div className="vx-chart-pane desktop-pane">
               <TradingChart instruments={feed.instruments} compact />
