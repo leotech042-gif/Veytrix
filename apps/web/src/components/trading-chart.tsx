@@ -11,20 +11,47 @@ const timeframes: ChartTimeframe[] = [
 ];
 
 const tradingViewIntervals: Record<ChartTimeframe, string> = {
-  M1: "1", M5: "5", M15: "15", M30: "30", H1: "60", H4: "240", D1: "D", W1: "W",
+  M1: "1",
+  M3: "3",
+  M5: "5",
+  M15: "15",
+  M30: "30",
+  H1: "60",
+  H4: "240",
+  D1: "D",
+  W1: "W",
 };
 
 const tradingViewAliases: Record<string, string> = {
-  AUS200: "TVC:AU200", BTCUSD: "BINANCE:BTCUSDT", ETHUSD: "BINANCE:ETHUSDT",
-  GER40: "FOREXCOM:GER40", HK50: "TVC:HSI", JP225: "FOREXCOM:JPN225",
-  UK100: "FOREXCOM:UKXGBP", US100: "FOREXCOM:NSXUSD", US30: "FOREXCOM:DJI",
-  US500: "FOREXCOM:SPXUSD", XAGUSD: "OANDA:XAGUSD", XAUUSD: "OANDA:XAUUSD",
-  XPDUSD: "OANDA:XPDUSD", XPTUSD: "OANDA:XPTUSD",
+  AUS200: "TVC:AU200",
+  BTCUSD: "BINANCE:BTCUSDT",
+  ETHUSD: "BINANCE:ETHUSDT",
+  GER40: "FOREXCOM:GER40",
+  HK50: "TVC:HSI",
+  JP225: "FOREXCOM:JPN225",
+  UK100: "FOREXCOM:UKXGBP",
+  US100: "FOREXCOM:NSXUSD",
+  US30: "FOREXCOM:DJI",
+  US500: "FOREXCOM:SPXUSD",
+  XAGUSD: "OANDA:XAGUSD",
+  XAUUSD: "OANDA:XAUUSD",
+  XPDUSD: "OANDA:XPDUSD",
+  XPTUSD: "OANDA:XPTUSD",
 };
 
 const PAIR_FLAGS: Record<string, string> = {
-  EUR: "🇪🇺", GBP: "🇬🇧", USD: "🇺🇸", JPY: "🇯🇵", AUD: "🇦🇺", CAD: "🇨🇦",
-  CHF: "🇨🇭", NZD: "🇳🇿", XAU: "🥇", XAG: "🥈", BTC: "₿", ETH: "Ξ",
+  EUR: "🇪🇺",
+  GBP: "🇬🇧",
+  USD: "🇺🇸",
+  JPY: "🇯🇵",
+  AUD: "🇦🇺",
+  CAD: "🇨🇦",
+  CHF: "🇨🇭",
+  NZD: "🇳🇿",
+  XAU: "🥇",
+  XAG: "🥈",
+  BTC: "₿",
+  ETH: "Ξ",
 };
 
 function pairFlags(symbol: string): string {
@@ -110,12 +137,10 @@ export function TradingChart({
   const symbol = toTradingViewSymbol(instrument);
   const timeframe = selectedTimeframe;
 
-  // Chart color is independent of app theme toggle (default white)
   const chartBackground = preferences.chartBackground || "#ffffff";
   const isChartLight = isLightBg(chartBackground);
   const chartTheme = isChartLight ? "light" : "dark";
   const gridColor = isChartLight ? "rgba(0,0,0,0.05)" : "rgba(255,255,255,0.04)";
-
   const widgetKey = JSON.stringify([symbol, timeframe, chartBackground]);
 
   const loading = Boolean(symbol) && widgetLoadResult?.key !== widgetKey;
@@ -226,7 +251,6 @@ export function TradingChart({
         fullScreen ? " chart-fullscreen" : ""
       }`}
     >
-      {/* Pair label is TradingView's own top bar — no external header */}
       <div className="chart-canvas-wrap chart-alien-canvas">
         <div className="chart-canvas" aria-label="Veytrix chart">
           <div
