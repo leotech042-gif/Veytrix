@@ -24,6 +24,17 @@ const navItems = [
   { href: "/faq", label: "FAQ" },
 ] as const;
 
+const roomItems = [
+  { href: "/charts", label: "Chart", icon: "◫" },
+  { href: "/markets", label: "Markets", icon: "≋" },
+  { href: "/signals", label: "Signals", icon: "⌁" },
+  { href: "/fundamentals", label: "News & fundamentals", icon: "▤" },
+  { href: "/terminal", label: "Terminal", icon: ">_" },
+  { href: "/history", label: "History", icon: "◷" },
+  { href: "/assistant", label: "Assistant", icon: "✧" },
+  { href: "/faq", label: "Help", icon: "?" },
+] as const;
+
 const bottomNav = [
   { href: "/signals", label: "Signals", icon: "signals" },
   { href: "/markets", label: "Markets", icon: "markets" },
@@ -150,11 +161,64 @@ function RouteGlowLoader() {
   );
 }
 
+function RoomDock({
+  pathname,
+  collapsed,
+  onTogglePanel,
+  onOpenRoom,
+}: {
+  pathname: string;
+  collapsed: boolean;
+  onTogglePanel: () => void;
+  onOpenRoom: () => void;
+}) {
+  return (
+    <aside className="vx-room-dock" aria-label="Chart rooms">
+      <button
+        type="button"
+        className="vx-room-dock-toggle"
+        onClick={onTogglePanel}
+        aria-label={collapsed ? "Expand room panel" : "Collapse room panel"}
+        title={collapsed ? "Expand panel" : "Collapse panel"}
+      >
+        {collapsed ? "‹" : "›"}
+      </button>
+      <div className="vx-room-dock-items">
+        {roomItems.map((item) => {
+          const active = pathname.startsWith(item.href);
+          return (
+            <Link
+              key={item.href}
+              href={item.href}
+              onClick={onOpenRoom}
+              className={`vx-room-dock-item${active ? " active" : ""}`}
+              aria-label={item.label}
+              aria-current={active ? "page" : undefined}
+              title={item.label}
+            >
+              <span aria-hidden="true">{item.icon}</span>
+            </Link>
+          );
+        })}
+      </div>
+      <Link
+        href="/settings"
+        className="vx-room-dock-settings"
+        aria-label="Settings"
+        title="Settings · full screen"
+      >
+        <NavIcon name="settings" active={pathname.startsWith("/settings")} />
+      </Link>
+    </aside>
+  );
+}
+
 function ShellInner({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const connection = useMarketConnection();
   const hydrated = useHydrated();
   const feed = useMarketFeed();
+  const [panelCollapsed, setPanelCollapsed] = useState(false);
   const visibleConnection: StatusState = hydrated ? connection : { kind: "checking" };
   const isConnected =
     visibleConnection.kind === "ready" &&
@@ -166,7 +230,12 @@ function ShellInner({ children }: { children: React.ReactNode }) {
   }
 
   const onChart = pathname.startsWith("/charts");
-  const showSideRoom = !onChart;
+  const isSettings = pathname.startsWith("/settings");
+  const showSideRoom = !onChart && !isSettings;
+
+  useEffect(() => {
+    setPanelCollapsed(onChart || isSettings);
+  }, [pathname, onChart, isSettings]);
 
   return (
     <div className="app-shell vx-shell">
@@ -205,16 +274,29 @@ function ShellInner({ children }: { children: React.ReactNode }) {
           </div>
         </header>
 
-        <div className={`vx-body${showSideRoom ? " with-room" : ""}`}>
+        <div
+          className={`vx-body${showSideRoom ? " with-room" : ""}${panelCollapsed && showSideRoom ? " room-collapsed" : ""}${isSettings ? " settings-fullscreen" : ""}`}
+        >
           {showSideRoom ? (
             <div className="vx-chart-pane desktop-pane">
               <TradingChart instruments={feed.instruments} compact />
             </div>
           ) : null}
 
-          <main className={`main-area vx-room-pane${onChart ? " is-chart" : ""}`}>
+          <main
+            className={`main-area vx-room-pane${onChart ? " is-chart" : ""}${isSettings ? " is-settings" : ""}`}
+          >
             {children}
           </main>
+
+          {!isSettings ? (
+            <RoomDock
+              pathname={pathname}
+              collapsed={panelCollapsed}
+              onTogglePanel={() => setPanelCollapsed((value) => !value)}
+              onOpenRoom={() => setPanelCollapsed(false)}
+            />
+          ) : null}
         </div>
 
         <nav className="mobile-bottom-nav mt5-nav" aria-label="Primary">
