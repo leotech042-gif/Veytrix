@@ -1,4 +1,4 @@
-/* Clean desktop rail + MT5 mobile — no placeholder docks */
+/* Top-right nav · chart center · room beside chart · no left rail */
 
 .app-shell.vx-shell {
   display: flex;
@@ -7,83 +7,13 @@
   background: var(--bg);
 }
 
-/* Hide old sidebar if present */
-.vx-shell .sidebar {
+.vx-shell .sidebar,
+.vx-rail,
+.tv-rail,
+.tv-dock {
   display: none !important;
 }
 
-/* —— Desktop left rail —— */
-.vx-rail {
-  display: none;
-  flex-direction: column;
-  width: 72px;
-  flex-shrink: 0;
-  padding: 12px 0 16px;
-  border-right: 1px solid var(--border);
-  background: var(--bg-elevated);
-  z-index: 40;
-}
-
-@media (min-width: 900px) {
-  .vx-rail {
-    display: flex;
-  }
-}
-
-.vx-rail-logo {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  height: 48px;
-  margin-bottom: 8px;
-}
-
-.vx-rail-nav {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 4px;
-  flex: 1;
-}
-
-.vx-rail-link {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 2px;
-  width: 60px;
-  min-height: 52px;
-  padding: 6px 4px;
-  border-radius: 12px;
-  color: var(--muted);
-  text-decoration: none;
-  font-size: 9px;
-  font-weight: 650;
-}
-
-.vx-rail-link:hover {
-  background: color-mix(in srgb, var(--text) 6%, transparent);
-  color: var(--text);
-}
-
-.vx-rail-link.active {
-  background: color-mix(in srgb, var(--accent) 14%, transparent);
-  color: var(--accent);
-}
-
-.vx-rail-label {
-  line-height: 1.1;
-  text-align: center;
-}
-
-.vx-rail-foot {
-  display: flex;
-  justify-content: center;
-  padding-top: 8px;
-}
-
-/* Main */
 .vx-shell .workspace-main {
   flex: 1;
   min-width: 0;
@@ -92,53 +22,165 @@
   min-height: 100dvh;
 }
 
+/* —— Top bar —— */
 .vx-topbar {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 8px 14px;
+  padding: 6px 12px;
   border-bottom: 1px solid var(--border-subtle);
   background: var(--bg-elevated);
+  flex-shrink: 0;
+  z-index: 30;
 }
 
 .vx-top-left {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   min-width: 0;
+}
+
+.vx-top-left .brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  text-decoration: none;
+  color: var(--text);
+  font-weight: 700;
+  font-size: 14px;
+}
+
+.vx-top-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.vx-top-nav {
+  display: none;
+  align-items: center;
+  gap: 2px;
+  margin-right: 6px;
+}
+
+@media (min-width: 900px) {
+  .vx-top-nav {
+    display: flex;
+  }
+}
+
+.vx-top-link {
+  padding: 6px 10px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 650;
+  color: var(--muted);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.vx-top-link:hover {
+  color: var(--text);
+  background: color-mix(in srgb, var(--text) 6%, transparent);
+}
+
+.vx-top-link.active {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+/* —— Body: chart + optional room —— */
+.vx-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+@media (min-width: 900px) {
+  .vx-body.with-room {
+    flex-direction: row;
+  }
+
+  .vx-chart-pane.desktop-pane {
+    display: flex;
+    flex: 1.2;
+    min-width: 0;
+    min-height: 0;
+    border-right: 1px solid var(--border-subtle);
+    padding: 8px;
+  }
+
+  .vx-chart-pane .trading-chart-panel {
+    flex: 1;
+    max-width: none;
+    height: 100%;
+  }
+
+  .vx-room-pane {
+    flex: 0 0 min(420px, 38vw);
+    max-width: 480px;
+    overflow-y: auto;
+    padding: 12px 14px 16px !important;
+  }
+
+  .vx-room-pane.is-chart {
+    flex: 1;
+    max-width: none;
+    padding: 8px 10px 10px !important;
+  }
+}
+
+.vx-chart-pane.desktop-pane {
+  display: none;
 }
 
 .vx-shell .main-area {
   flex: 1;
   min-height: 0;
-  padding: 12px 14px 16px;
+  padding: 10px 12px 16px;
+}
+
+.vx-shell .main-area.is-chart {
+  display: flex;
+  flex-direction: column;
+  padding: 8px 10px 10px;
+}
+
+.vx-shell .main-area.is-chart > * {
+  flex: 1;
+  min-height: 0;
+  max-width: none;
+}
+
+/* Chart fills height — kill empty white void */
+.vx-shell .trading-chart-panel {
+  max-width: none !important;
+  height: 100%;
+  min-height: 0;
+}
+
+.vx-shell .chart-alien-canvas,
+.vx-shell .chart-canvas {
+  height: 100% !important;
+  min-height: 360px !important;
 }
 
 @media (min-width: 900px) {
-  .vx-shell .main-area {
-    padding: 10px 14px 14px;
+  .vx-shell .chart-alien .chart-canvas {
+    height: calc(100dvh - 140px) !important;
+    min-height: 480px !important;
   }
-  .vx-shell .mobile-brand span {
-    display: none;
-  }
+
   .mobile-bottom-nav {
     display: none !important;
   }
 }
 
-/* Chart page: use height */
-.vx-shell .main-area:has(.trading-chart-panel) {
-  display: flex;
-  flex-direction: column;
-}
-
-.vx-shell .main-area:has(.trading-chart-panel) > * {
-  flex: 1;
-  min-height: 0;
-}
-
-/* —— Mobile MT5 bottom —— */
+/* Mobile MT5 bottom */
 .mobile-bottom-nav.mt5-nav {
   max-width: 100%;
   height: 68px;
@@ -146,7 +188,6 @@
   background: color-mix(in srgb, var(--bg-elevated) 95%, transparent);
   border-top: 1px solid var(--border);
   backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
   z-index: 50;
 }
 
@@ -172,6 +213,9 @@
   border-radius: 14px;
   background: color-mix(in srgb, var(--accent) 18%, transparent);
   border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .mt5-ico {
@@ -179,10 +223,4 @@
   align-items: center;
   justify-content: center;
   height: 26px;
-}
-
-/* Kill old tv-dock if cached */
-.tv-dock,
-.tv-rail {
-  display: none !important;
 }

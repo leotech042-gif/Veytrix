@@ -11,15 +11,16 @@ import {
   NotificationBell,
   NotificationsProvider,
 } from "./notifications";
+import { TradingChart } from "./trading-chart";
+import { useMarketFeed } from "./market-watch";
 
-/** Chart first — core workspace */
-const desktopNav = [
-  { href: "/charts", label: "Chart", icon: "chart" },
-  { href: "/signals", label: "Signals", icon: "signals" },
-  { href: "/markets", label: "Markets", icon: "markets" },
-  { href: "/fundamentals", label: "News", icon: "news" },
-  { href: "/settings", label: "Settings", icon: "settings" },
-  { href: "/faq", label: "FAQ", icon: "faq" },
+const navItems = [
+  { href: "/charts", label: "Chart" },
+  { href: "/signals", label: "Signals" },
+  { href: "/markets", label: "Markets" },
+  { href: "/fundamentals", label: "News" },
+  { href: "/settings", label: "Settings" },
+  { href: "/faq", label: "FAQ" },
 ] as const;
 
 const bottomNav = [
@@ -32,7 +33,7 @@ const bottomNav = [
 
 function NavIcon({ name, active }: { name: string; active?: boolean }) {
   const c = active ? "var(--accent)" : "currentColor";
-  const s = 22;
+  const s = 20;
   switch (name) {
     case "chart":
       return (
@@ -66,16 +67,8 @@ function NavIcon({ name, active }: { name: string; active?: boolean }) {
           <path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" strokeLinecap="round" />
         </svg>
       );
-    case "faq":
-      return (
-        <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="1.8">
-          <circle cx="12" cy="12" r="9" />
-          <path d="M9.5 9a2.5 2.5 0 015 0c0 1.5-2.5 2-2.5 4" strokeLinecap="round" />
-          <circle cx="12" cy="17" r="0.8" fill={c} stroke="none" />
-        </svg>
-      );
     default:
-      return <span>•</span>;
+      return null;
   }
 }
 
@@ -122,6 +115,7 @@ function ShellInner({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const connection = useMarketConnection();
   const hydrated = useHydrated();
+  const feed = useMarketFeed();
   const visibleConnection: StatusState = hydrated ? connection : { kind: "checking" };
   const isConnected =
     visibleConnection.kind === "ready" &&
@@ -132,43 +126,16 @@ function ShellInner({ children }: { children: React.ReactNode }) {
     return <>{children}</>;
   }
 
+  const onChart = pathname.startsWith("/charts");
+  /** Desktop: chart stays; other rooms open beside it */
+  const showSideRoom = !onChart;
+
   return (
     <div className="app-shell vx-shell">
-      {/* Desktop left icon rail — navigate only, no fake dock panels */}
-      <aside className="vx-rail" aria-label="Main">
-        <Link className="vx-rail-logo" href="/charts" aria-label="Veytrix chart">
-          <img src="/logo.svg" alt="" width={26} height={26} />
-        </Link>
-        <nav className="vx-rail-nav">
-          {desktopNav.map((item) => {
-            const active = pathname.startsWith(item.href);
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={`vx-rail-link${active ? " active" : ""}`}
-                title={item.label}
-                aria-label={item.label}
-                aria-current={active ? "page" : undefined}
-              >
-                <NavIcon name={item.icon} active={active} />
-                <span className="vx-rail-label">{item.label}</span>
-              </Link>
-            );
-          })}
-        </nav>
-        <div className="vx-rail-foot">
-          <span
-            className={`state-dot${isConnected ? " connected" : ""}`}
-            title={connectionLabel(visibleConnection)}
-          />
-        </div>
-      </aside>
-
       <div className="workspace-main">
         <header className="topbar vx-topbar">
           <div className="vx-top-left">
-            <Link className="brand mobile-brand" href="/charts">
+            <Link className="brand" href="/charts">
               <img src="/logo.svg" alt="" width={24} height={24} />
               <span>Veytrix</span>
             </Link>
@@ -177,15 +144,42 @@ function ShellInner({ children }: { children: React.ReactNode }) {
               {connectionLabel(visibleConnection)}
             </span>
           </div>
-          <div className="top-actions">
+
+          {/* Nav sits on the RIGHT with theme + notifications */}
+          <div className="vx-top-right">
+            <nav className="vx-top-nav" aria-label="Workspace">
+              {navItems.map((item) => {
+                const active = pathname.startsWith(item.href);
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    className={`vx-top-link${active ? " active" : ""}`}
+                    aria-current={active ? "page" : undefined}
+                  >
+                    {item.label}
+                  </Link>
+                );
+              })}
+            </nav>
             <NotificationBell />
             <ThemeToggle />
           </div>
         </header>
 
-        <main className="main-area">{children}</main>
+        <div className={`vx-body${showSideRoom ? " with-room" : ""}`}>
+          {/* Chart always on desktop when a side room is open */}
+          {showSideRoom ? (
+            <div className="vx-chart-pane desktop-pane">
+              <TradingChart instruments={feed.instruments} compact />
+            </div>
+          ) : null}
 
-        {/* Mobile MT5-style bottom — Chart is center core */}
+          <main className={`main-area vx-room-pane${onChart ? " is-chart" : ""}`}>
+            {children}
+          </main>
+        </div>
+
         <nav className="mobile-bottom-nav mt5-nav" aria-label="Primary">
           {bottomNav.map((item) => {
             const active = pathname.startsWith(item.href);
