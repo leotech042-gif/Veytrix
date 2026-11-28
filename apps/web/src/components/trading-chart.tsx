@@ -7,11 +7,11 @@ import { useMarketFavorites } from "./market-watch";
 import { VeytrixLoader } from "./veytrix-loader";
 
 const timeframes: ChartTimeframe[] = [
-  "M1", "M3", "M5", "M15", "M30", "H1", "H4", "D1", "W1",
+  "M1", "M5", "M15", "M30", "H1", "H4", "D1", "W1",
 ];
 
 const tradingViewIntervals: Record<ChartTimeframe, string> = {
-  M1: "1", M3: "3", M5: "5", M15: "15", M30: "30", H1: "60", H4: "240", D1: "D", W1: "W",
+  M1: "1", M5: "5", M15: "15", M30: "30", H1: "60", H4: "240", D1: "D", W1: "W",
 };
 
 const tradingViewAliases: Record<string, string> = {
@@ -96,7 +96,7 @@ export function TradingChart({
     const favSet = new Set(favorites.map((s) => s.toUpperCase()));
     const fromFeed = instruments.filter((i) => favSet.has(i.symbol.toUpperCase()));
     if (fromFeed.length > 0) return fromFeed;
-    const defaults = ["EURUSD", "GBPUSD", "USDJPY", "XAUUSD", "AUDUSD"];
+    const defaults = ["EURUSD", "GBPUSD", "USDJPY", "XAUUSD", "AUDUSD", "XAGUSD"];
     return defaults.map(
       (symbol) =>
         instruments.find((i) => i.symbol.toUpperCase() === symbol) ??
@@ -107,7 +107,6 @@ export function TradingChart({
   const [selectedInstrument, setSelectedInstrument] = useState("");
   const [selectedTimeframe, setSelectedTimeframe] = useState<ChartTimeframe>("M30");
   const [fullScreen, setFullScreen] = useState(false);
-  const [reloadToken, setReloadToken] = useState(0);
   const [showFx, setShowFx] = useState(false);
   const [widgetLoadResult, setWidgetLoadResult] = useState<WidgetLoadResult | null>(null);
 
@@ -128,10 +127,9 @@ export function TradingChart({
   const gridColor =
     resolvedTheme === "light" ? "rgba(0,0,0,0.05)" : "rgba(255,255,255,0.04)";
 
-  const widgetKey = JSON.stringify([
-    symbol, timeframe, showSma, showEma, showVolume, resolvedTheme,
-    preferences.bullishColor, preferences.bearishColor, reloadToken,
-  ]);
+  // Only remount when symbol / TF / theme change — not on indicator toggles or reload.
+  // Remounting wipes drawings; free TV embed cannot persist them across remounts.
+  const widgetKey = JSON.stringify([symbol, timeframe, resolvedTheme]);
 
   const loading = Boolean(symbol) && widgetLoadResult?.key !== widgetKey;
   const error =
@@ -199,7 +197,10 @@ export function TradingChart({
     };
     script.onerror = () => {
       if (active) {
-        setWidgetLoadResult({ key: widgetKey, error: "Chart could not load. Check network." });
+        setWidgetLoadResult({
+          key: widgetKey,
+          error: "Chart could not load. Check network.",
+        });
       }
     };
     embedContainer.appendChild(script);
@@ -208,10 +209,9 @@ export function TradingChart({
       active = false;
       embedContainer.remove();
     };
-  }, [
-    chartBackground, gridColor, preferences.bearishColor, preferences.bullishColor,
-    showEma, showSma, showVolume, symbol, timeframe, resolvedTheme, widgetKey,
-  ]);
+    // studies / colors read on mount only — changing ƒx does not remount (keeps drawings)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [symbol, timeframe, resolvedTheme, widgetKey]);
 
   useEffect(() => {
     const sync = () => setFullScreen(document.fullscreenElement === panelRef.current);
@@ -253,13 +253,6 @@ export function TradingChart({
             <span>{activeInstrument}</span>
           </div>
         </div>
-        <div className="chart-float-tools" title="Drawing tools are on the chart left toolbar">
-          <span className="chart-float-ico">⋮⋮</span>
-          <span className="chart-float-ico">—</span>
-          <span className="chart-float-ico">ƒ</span>
-          <span className="chart-float-ico">▢</span>
-          <span className="chart-float-ico">／</span>
-        </div>
       </div>
 
       <div className="chart-canvas-wrap chart-alien-canvas">
@@ -280,78 +273,66 @@ export function TradingChart({
         ) : null}
       </div>
 
-      <div className="chart-bottom-bar">
-        <div className="chart-pair-rail" role="list">
+      <div className="chart-bottom-bar chart-bottom-bar-compact">
+        <select
+          className="chart-pair-select"
+          value={activeInstrument}
+          onChange={(e) => setSelectedInstrument(e.target.value)}
+          aria-label="Pair"
+        >
           {list.map((item) => (
-            <button
-              key={item.symbol}
-              type="button"
-              role="listitem"
-              className={
-                "chart-pair-pill" +
-                (item.symbol.toUpperCase() === activeInstrument.toUpperCase() ? " on" : "")
-              }
-              onClick={() => setSelectedInstrument(item.symbol)}
-            >
-              <span className="chart-pair-pill-flags">{pairFlags(item.symbol)}</span>
-              <span>{item.symbol}</span>
-            </button>
+            <option key={item.symbol} value={item.symbol}>
+              {pairFlags(item.symbol)} {item.symbol}
+            </option>
           ))}
-        </div>
+        </select>
 
-        <div className="chart-bottom-actions">
-          <select
-            className="chart-tf-pill"
-            value={timeframe}
-            onChange={(e) => setSelectedTimeframe(e.target.value as ChartTimeframe)}
-            aria-label="Timeframe"
-          >
-            {timeframes.map((tf) => (
-              <option key={tf} value={tf}>
-                {tf === "M3" ? "3m" : tf === "M5" ? "5m" : tf === "M15" ? "15m" : tf === "M30" ? "30m" : tf === "H1" ? "1H" : tf}
-              </option>
-            ))}
-          </select>
+        <select
+          className="chart-tf-pill"
+          value={timeframe}
+          onChange={(e) => setSelectedTimeframe(e.target.value as ChartTimeframe)}
+          aria-label="Timeframe"
+        >
+          {timeframes.map((tf) => (
+            <option key={tf} value={tf}>
+              {tf === "M15" ? "15m" : tf === "M30" ? "30m" : tf === "H1" ? "1H" : tf}
+            </option>
+          ))}
+        </select>
 
-          <button
-            type="button"
-            className={`chart-icon-btn${showFx ? " on" : ""}`}
-            aria-label="Indicators"
-            onClick={() => setShowFx((v) => !v)}
-          >
-            ƒx
-          </button>
+        <button
+          type="button"
+          className={`chart-icon-btn${showFx ? " on" : ""}`}
+          aria-label="Indicators"
+          onClick={() => setShowFx((v) => !v)}
+        >
+          ƒx
+        </button>
 
-          <button
-            type="button"
-            className="chart-icon-btn"
-            aria-label="Reload chart"
-            onClick={() => setReloadToken((t) => t + 1)}
-          >
-            ↻
-          </button>
-
-          <button
-            type="button"
-            className="chart-icon-btn"
-            aria-label={fullScreen ? "Exit full screen" : "Full screen"}
-            aria-pressed={fullScreen}
-            onClick={toggleFullScreen}
-          >
-            {fullScreen ? "✕" : "⛶"}
-          </button>
-        </div>
+        <button
+          type="button"
+          className="chart-icon-btn"
+          aria-label={fullScreen ? "Exit full screen" : "Full screen"}
+          aria-pressed={fullScreen}
+          onClick={toggleFullScreen}
+        >
+          {fullScreen ? "✕" : "⛶"}
+        </button>
       </div>
 
       {showFx && (
         <div className="chart-fx-sheet">
+          <p className="chart-tools-hint">
+            Prefer the chart’s own Indicators (ƒ) menu — that keeps drawings.
+            Toggles below apply on the next pair/timeframe change only.
+          </p>
           <label>
             <input
               type="checkbox"
               checked={showSma}
               onChange={(e) => updatePreferences({ showSma: e.target.checked })}
             />
-            SMA
+            SMA (next chart load)
           </label>
           <label>
             <input
@@ -359,7 +340,7 @@ export function TradingChart({
               checked={showEma}
               onChange={(e) => updatePreferences({ showEma: e.target.checked })}
             />
-            EMA
+            EMA (next chart load)
           </label>
           <label>
             <input
@@ -367,11 +348,8 @@ export function TradingChart({
               checked={showVolume}
               onChange={(e) => updatePreferences({ showVolume: e.target.checked })}
             />
-            Volume
+            Volume (next chart load)
           </label>
-          <p className="chart-tools-hint">
-            More indicators and all drawings are on the chart toolbars (left / top).
-          </p>
         </div>
       )}
     </section>
