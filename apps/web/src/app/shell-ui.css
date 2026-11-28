@@ -224,3 +224,138 @@
   justify-content: center;
   height: 26px;
 }
+
+
+/* TradingView-style right room dock. The room content stays inside the chart workspace. */
+.vx-room-dock {
+  display: none;
+  flex: 0 0 52px;
+  min-width: 52px;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 5px;
+  border-left: 1px solid var(--border-subtle);
+  background: var(--bg-elevated);
+  z-index: 5;
+}
+
+.vx-room-dock-toggle,
+.vx-room-dock-item,
+.vx-room-dock-settings {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  flex: 0 0 38px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  color: var(--text-secondary);
+  background: transparent;
+  text-decoration: none;
+  cursor: pointer;
+  transition: color .16s ease, background .16s ease, border-color .16s ease;
+}
+
+.vx-room-dock-toggle {
+  border-color: var(--border-subtle);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 23px;
+  line-height: 1;
+}
+
+.vx-room-dock-items {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  width: 100%;
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+
+.vx-room-dock-items::-webkit-scrollbar {
+  display: none;
+}
+
+.vx-room-dock-item {
+  font-size: 19px;
+  font-weight: 650;
+  letter-spacing: -.8px;
+}
+
+.vx-room-dock-item:hover,
+.vx-room-dock-settings:hover,
+.vx-room-dock-toggle:hover {
+  color: var(--text);
+  background: var(--surface-hover);
+}
+
+.vx-room-dock-item.active {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 30%, transparent);
+  background: color-mix(in srgb, var(--accent) 12%, var(--surface));
+}
+
+.vx-room-dock-settings {
+  border-top: 1px solid var(--border-subtle);
+  border-radius: 0;
+  width: 100%;
+  padding-top: 8px;
+  height: 46px;
+  flex-basis: 46px;
+}
+
+@media (min-width: 900px) {
+  .vx-room-dock {
+    display: flex;
+  }
+
+  .vx-body.with-room .vx-room-pane {
+    flex: 0 0 min(420px, 38vw);
+    max-width: 480px;
+    min-width: 280px;
+    overflow-y: auto;
+    transition: flex-basis .2s ease, opacity .16s ease;
+  }
+
+  .vx-body.with-room .vx-chart-pane.desktop-pane {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .vx-body.room-collapsed .vx-chart-pane.desktop-pane {
+    flex: 1;
+  }
+
+  .vx-body.room-collapsed .vx-room-pane {
+    display: none;
+  }
+
+  .vx-body.settings-fullscreen {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+  }
+
+  .vx-room-pane.is-settings {
+    flex: 1;
+    width: 100%;
+    max-width: none;
+    min-width: 0;
+    overflow-y: auto;
+    padding: 24px clamp(24px, 5vw, 72px) 40px !important;
+  }
+}
+
+@media (max-width: 899px) {
+  .vx-room-dock {
+    display: none !important;
+  }
+
+  .mobile-bottom-nav.settings-hidden {
+    display: none !important;
+  }
+}
