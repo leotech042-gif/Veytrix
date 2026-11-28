@@ -6,14 +6,7 @@ import { getSignalStatus, getSignals } from "@/lib/market-data-api";
 import { useMarketFavorites } from "./market-watch";
 
 const DEFAULT_PAIRS = [
-  "EURUSD",
-  "GBPUSD",
-  "USDJPY",
-  "XAUUSD",
-  "AUDUSD",
-  "USDCAD",
-  "XAGUSD",
-  "GBPJPY",
+  "EURUSD", "GBPUSD", "USDJPY", "XAUUSD", "AUDUSD", "USDCAD", "XAGUSD", "GBPJPY",
 ];
 
 function isSignalStatus(value: unknown): value is SignalProviderStatus {
@@ -56,6 +49,11 @@ function fmt(n: number | undefined | null): string {
   return String(n);
 }
 
+function extraField(signal: TradingSignal, key: string): string | undefined {
+  const v = (signal as Record<string, unknown>)[key];
+  return typeof v === "string" && v.trim() ? v.trim() : undefined;
+}
+
 export function SignalsPage() {
   const { favorites: marketFavorites } = useMarketFavorites();
   const [status, setStatus] = useState<SignalProviderStatus | null>(null);
@@ -78,19 +76,19 @@ export function SignalsPage() {
         setSignals([]);
         return;
       }
-      const favs = marketFavorites.map((s) => s.toUpperCase());
-      const pairs = favs.length > 0 ? favs : DEFAULT_PAIRS;
+      const pairs =
+        marketFavorites.length > 0 ? marketFavorites : DEFAULT_PAIRS;
       const raw = await getSignals({ favorites: pairs });
       if (!Array.isArray(raw) || !raw.every(isTradingSignal)) {
         setSignals([]);
         return;
       }
       setSignals(sortSignals(raw));
-    } catch (error) {
+    } catch (e) {
       setSignals([]);
       setScanError(
-        error instanceof Error
-          ? error.message
+        e instanceof Error
+          ? e.message
           : "Signal scan failed. Check that the Veytrix API is running.",
       );
     } finally {
@@ -100,21 +98,11 @@ export function SignalsPage() {
   }
 
   useEffect(() => {
-    const initial = window.setTimeout(() => void load(), 0);
-    const interval = window.setInterval(() => void load(), 60_000);
+    void load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-    return () => {
-      window.clearTimeout(initial);
-      window.clearInterval(interval);
-    };
-  }, [marketFavorites.join(",")]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  async function runSearch() {
-    const s = query.trim().toUpperCase();
-    if (!s) {
-      setScanError("Enter an instrument symbol to run the M15 → M5 → M3 deep scan.");
-      return;
-    }
+  async function scanOne(s: string) {
     setRefreshing(true);
     setScanError(null);
     try {
@@ -122,24 +110,48 @@ export function SignalsPage() {
       if (Array.isArray(raw) && raw.every(isTradingSignal)) {
         setSignals(sortSignals(raw));
       }
-    } catch (error) {
-      setScanError(
-        error instanceof Error
-          ? error.message
-          : "The requested pair could not be analysed.",
-      );
+    } catch (e) {
+      setScanError(e instanceof Error ? e.message : "Scan failed");
     } finally {
       setRefreshing(false);
     }
   }
 
-  const setups = signals.filter((s) => s.type === "setup");
-  const biases = signals.filter((s) => s.type === "bias");
+  const q = query.trim().toLowerCase();
+  const filtered = signals.filter((s) => {
+    if (filter === "setup" && s.type !== "setup") return false;
+    if (filter === "bias" && s.type !== "bias") return false;
+    if (!q) return true;
+    return (
+      s.instrument.toLowerCase().includes(q) ||
+      s.summary.toLowerCase().includes(q)
+    );
+  });
+  const setups = filtered.filter((s) => s.type === "setup");
+  const biases = filtered.filter((s) => s.type === "bias");
   const showSetups = filter === "all" || filter === "setup";
   const showBias = filter === "all" || filter === "bias";
 
   return (
     <div className="sig-screen">
+      <div className="sig-toolbar">
+        <input
+          type="search"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Search pair or text…"
+          aria-label="Search signals"
+        />
+        <button
+          type="button"
+          className="secondary-button"
+          disabled={refreshing}
+          onClick={() => void load()}
+        >
+          {refreshing ? "Scanning…" : "Rescan"}
+        </button>
+      </div>
+
       <div className="sig-filters">
         {(["all", "setup", "bias"] as const).map((f) => (
           <button
@@ -148,48 +160,37 @@ export function SignalsPage() {
             className={`sig-filter${filter === f ? " on" : ""}`}
             onClick={() => setFilter(f)}
           >
-            {f === "all" ? "All" : f === "setup" ? "Setups" : "Bias only"}
+            {f === "all" ? "All" : f === "setup" ? "Setups" : "Bias"}
           </button>
         ))}
       </div>
 
-      <div className="sig-search">
+      <div className="sig-scan-row">
         <input
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Enter a pair for deep scan — e.g. XAUUSD"
-          onKeyDown={(e) => e.key === "Enter" && void runSearch()}
+          type="text"
+          placeholder="Scan one pair e.g. EURUSD"
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              const v = (e.target as HTMLInputElement).value.trim().toUpperCase();
+              if (v) void scanOne(v);
+            }
+          }}
+          aria-label="Scan one instrument"
         />
-        <button
-          type="button"
-          className="secondary-button"
-          onClick={() => void runSearch()}
-        >
-          Deep scan
-        </button>
-        <button
-          type="button"
-          className="text-button"
-          onClick={() => void load()}
-          disabled={refreshing}
-        >
-          {refreshing ? "…" : "Refresh"}
-        </button>
       </div>
 
-      {loading && <div className="home-empty">Loading…</div>}
-
+      {status && status.state !== "connected" && (
+        <div className="home-empty">{status.message}</div>
+      )}
+      {loading && <div className="home-empty">Loading signals…</div>}
       {scanError && <div className="home-empty">{scanError}</div>}
 
       {!loading && !scanError && setups.length === 0 && biases.length === 0 && (
         <div className="home-empty">
-          {status?.state === "connected"
-            ? "No valid setup or directional bias was returned. Check the pair scan and candle history."
-            : status?.message ?? "Engine offline"}
+          No valid setup or directional bias was returned. Check the pair scan and candle history.
         </div>
       )}
 
-      {/* SETUP CARDS only */}
       {showSetups &&
         setups.map((signal) => {
           const isBuy = signal.direction === "bullish";
@@ -201,6 +202,8 @@ export function SignalsPage() {
           const tp1 = signal.takeProfit1 ?? signal.takeProfit;
           const tp2 = signal.takeProfit2;
           const tp3 = signal.takeProfit3 ?? signal.takeProfit;
+          const tech = extraField(signal, "technicalExplanation") ?? extraField(signal, "explanation");
+          const fund = extraField(signal, "fundamentalExplanation");
 
           return (
             <article
@@ -219,17 +222,17 @@ export function SignalsPage() {
 
               <div className="vx-sig-title">
                 <strong>{signal.instrument}</strong>
-                <span
-                  className={`vx-sig-dir ${isBuy ? "buy" : isSell ? "sell" : "bias"}`}
-                >
+                <span className={`vx-sig-dir ${isBuy ? "buy" : isSell ? "sell" : "bias"}`}>
                   {isSell ? "↓ " : isBuy ? "↑ " : ""}
                   {dir}
                 </span>
               </div>
 
-              {signal.summary && (
-                <p className="vx-sig-summary">{signal.summary}</p>
+              {signal.summary && <p className="vx-sig-summary">{signal.summary}</p>}
+              {tech && tech !== signal.summary && (
+                <p className="vx-sig-explain">{tech}</p>
               )}
+              {fund && <p className="vx-sig-explain fund">Fund: {fund}</p>}
 
               <div className="vx-sig-grid">
                 <div>
@@ -259,9 +262,7 @@ export function SignalsPage() {
                 <div>
                   <span>R:R</span>
                   <strong>
-                    {signal.riskReward != null
-                      ? `1:${signal.riskReward}`
-                      : "—"}
+                    {signal.riskReward != null ? `1:${signal.riskReward}` : "—"}
                   </strong>
                 </div>
                 <div>
@@ -273,9 +274,7 @@ export function SignalsPage() {
                 <div>
                   <span>Reward</span>
                   <strong>
-                    {signal.rewardPips != null
-                      ? `${signal.rewardPips} pips`
-                      : "—"}
+                    {signal.rewardPips != null ? `${signal.rewardPips} pips` : "—"}
                   </strong>
                 </div>
               </div>
@@ -283,63 +282,36 @@ export function SignalsPage() {
           );
         })}
 
-      {/* BIAS — separate rows, not setup cards */}
       {showBias && biases.length > 0 && (
         <div className="sig-bias-block">
-          <h3>Bias only</h3>
-          <p className="sig-bias-note">
-            No valid entry yet — wait for confluence
-          </p>
+          <p className="sig-bias-note">Directional bias (structure + context)</p>
           {biases.map((b) => {
-            const expanded = expandedBiasIds.includes(b.id);
-            const detailsId = "bias-details-" + b.id.replace(/[^a-zA-Z0-9_-]/g, "-");
+            const open = expandedBiasIds.includes(b.id);
+            const tech = extraField(b, "technicalExplanation") ?? extraField(b, "explanation");
+            const fund = extraField(b, "fundamentalExplanation");
             return (
-              <div className="sig-bias-item" key={b.id}>
+              <div key={b.id} className="sig-bias-row">
                 <button
                   type="button"
-                  className="sig-bias-row"
-                  aria-expanded={expanded}
-                  aria-controls={detailsId}
+                  className="sig-bias-toggle"
                   onClick={() =>
-                    setExpandedBiasIds((current) =>
-                      expanded
-                        ? current.filter((id) => id !== b.id)
-                        : [...current, b.id],
+                    setExpandedBiasIds((ids) =>
+                      open ? ids.filter((x) => x !== b.id) : [...ids, b.id],
                     )
                   }
                 >
-                  <span
-                    className={`sig-bias-dot ${b.direction === "bullish" ? "up" : b.direction === "bearish" ? "down" : ""}`}
-                  />
-                  <span>
-                    <strong>
-                      {b.instrument} ·{" "}
-                      {b.direction === "bullish"
-                        ? "Bullish bias"
-                        : b.direction === "bearish"
-                          ? "Bearish bias"
-                          : "Neutral bias"}{" "}
-                      · {b.confidence}%
-                    </strong>
-                    <span>{b.summary}</span>
-                  </span>
-                  <span className={"chevron" + (expanded ? " expanded" : "")}>›</span>
+                  <strong>{b.instrument}</strong>
+                  <span className={`news-pair-bias ${b.direction}`}>{b.direction}</span>
+                  <span>{b.confidence}%</span>
+                  <span>{open ? "▾" : "›"}</span>
                 </button>
-                <p className="sig-bias-note">
-                  {b.technicalExplanation || b.summary}
-                </p>
-                {expanded ? (
-                  <div className="sig-bias-expanded" id={detailsId}>
-                    <div>
-                      <strong>Technical</strong>
-                      <p>{b.technicalExplanation || b.summary}</p>
-                    </div>
-                    <div>
-                      <strong>Fundamental</strong>
-                      <p>{b.fundamentalExplanation || "No confirmed recent fundamental direction is available for this pair."}</p>
-                    </div>
+                {open && (
+                  <div className="sig-bias-body">
+                    <p>{b.summary}</p>
+                    {tech && <p className="vx-sig-explain">{tech}</p>}
+                    {fund && <p className="vx-sig-explain fund">Fund: {fund}</p>}
                   </div>
-                ) : null}
+                )}
               </div>
             );
           })}
