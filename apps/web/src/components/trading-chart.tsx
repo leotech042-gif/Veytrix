@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { ChartTimeframe, MarketInstrument } from "@veytrix/shared";
 import { usePreferences } from "./theme-provider";
 import { useMarketFavorites } from "./market-watch";
@@ -51,21 +51,13 @@ function toTradingViewSymbol(instrument?: MarketInstrument): string {
   return normalized;
 }
 
-function subscribeToResolvedTheme(onChange: () => void): () => void {
-  const observer = new MutationObserver(onChange);
-  observer.observe(document.documentElement, {
-    attributes: true,
-    attributeFilter: ["data-theme"],
-  });
-  return () => observer.disconnect();
-}
-
-function getResolvedTheme(): "light" | "dark" {
-  return document.documentElement.dataset.theme === "light" ? "light" : "dark";
-}
-
-function getServerTheme(): "light" | "dark" {
-  return "dark";
+function isLightBg(hex: string): boolean {
+  const h = hex.replace("#", "");
+  if (h.length < 6) return true;
+  const r = parseInt(h.slice(0, 2), 16);
+  const g = parseInt(h.slice(2, 4), 16);
+  const b = parseInt(h.slice(4, 6), 16);
+  return (r * 299 + g * 587 + b * 114) / 1000 > 160;
 }
 
 interface WidgetLoadResult {
@@ -86,11 +78,6 @@ export function TradingChart({
   const widgetRef = useRef<HTMLDivElement>(null);
   const { favorites } = useMarketFavorites();
   const { preferences, updatePreferences } = usePreferences();
-  const resolvedTheme = useSyncExternalStore(
-    subscribeToResolvedTheme,
-    getResolvedTheme,
-    getServerTheme,
-  );
 
   const list = useMemo(() => {
     const favSet = new Set(favorites.map((s) => s.toUpperCase()));
@@ -123,13 +110,13 @@ export function TradingChart({
   const symbol = toTradingViewSymbol(instrument);
   const timeframe = selectedTimeframe;
 
-  const chartBackground = resolvedTheme === "light" ? "#ffffff" : "#0b0d10";
-  const gridColor =
-    resolvedTheme === "light" ? "rgba(0,0,0,0.05)" : "rgba(255,255,255,0.04)";
+  // Chart color is independent of app theme toggle (default white)
+  const chartBackground = preferences.chartBackground || "#ffffff";
+  const isChartLight = isLightBg(chartBackground);
+  const chartTheme = isChartLight ? "light" : "dark";
+  const gridColor = isChartLight ? "rgba(0,0,0,0.05)" : "rgba(255,255,255,0.04)";
 
-  // Only remount when symbol / TF / theme change — not on indicator toggles or reload.
-  // Remounting wipes drawings; free TV embed cannot persist them across remounts.
-  const widgetKey = JSON.stringify([symbol, timeframe, resolvedTheme]);
+  const widgetKey = JSON.stringify([symbol, timeframe, chartBackground]);
 
   const loading = Boolean(symbol) && widgetLoadResult?.key !== widgetKey;
   const error =
@@ -162,7 +149,7 @@ export function TradingChart({
       symbol,
       interval: tradingViewIntervals[timeframe],
       timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-      theme: resolvedTheme === "light" ? "light" : "dark",
+      theme: chartTheme,
       style: "1",
       locale: "en",
       allow_symbol_change: false,
@@ -177,7 +164,7 @@ export function TradingChart({
       backgroundColor: chartBackground,
       gridColor,
       studies,
-      toolbar_bg: resolvedTheme === "light" ? "#ffffff" : "#131722",
+      toolbar_bg: isChartLight ? "#ffffff" : "#131722",
       overrides: {
         "paneProperties.background": chartBackground,
         "paneProperties.backgroundType": "solid",
@@ -209,9 +196,8 @@ export function TradingChart({
       active = false;
       embedContainer.remove();
     };
-    // studies / colors read on mount only — changing ƒx does not remount (keeps drawings)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [symbol, timeframe, resolvedTheme, widgetKey]);
+  }, [symbol, timeframe, chartBackground, widgetKey]);
 
   useEffect(() => {
     const sync = () => setFullScreen(document.fullscreenElement === panelRef.current);
@@ -233,11 +219,6 @@ export function TradingChart({
     void panel.requestFullscreen().catch(() => setFullScreen(true));
   };
 
-  const title =
-    instrument?.displayName?.replace(/\s*\/.*/, "") ||
-    instrument?.symbol ||
-    activeInstrument;
-
   return (
     <section
       ref={panelRef}
@@ -245,16 +226,7 @@ export function TradingChart({
         fullScreen ? " chart-fullscreen" : ""
       }`}
     >
-      <div className="chart-alien-head">
-        <div className="chart-alien-pair">
-          <span className="chart-pair-flags">{pairFlags(activeInstrument)}</span>
-          <div className="chart-alien-pair-text">
-            <strong>{title}</strong>
-            <span>{activeInstrument}</span>
-          </div>
-        </div>
-      </div>
-
+      {/* Pair label is TradingView's own top bar — no external header */}
       <div className="chart-canvas-wrap chart-alien-canvas">
         <div className="chart-canvas" aria-label="Veytrix chart">
           <div
@@ -323,8 +295,7 @@ export function TradingChart({
       {showFx && (
         <div className="chart-fx-sheet">
           <p className="chart-tools-hint">
-            Prefer the chart’s own Indicators (ƒ) menu — that keeps drawings.
-            Toggles below apply on the next pair/timeframe change only.
+            Use the chart Indicators menu to keep drawings. Toggles apply on next pair/TF change.
           </p>
           <label>
             <input
@@ -332,7 +303,7 @@ export function TradingChart({
               checked={showSma}
               onChange={(e) => updatePreferences({ showSma: e.target.checked })}
             />
-            SMA (next chart load)
+            SMA (next load)
           </label>
           <label>
             <input
@@ -340,7 +311,7 @@ export function TradingChart({
               checked={showEma}
               onChange={(e) => updatePreferences({ showEma: e.target.checked })}
             />
-            EMA (next chart load)
+            EMA (next load)
           </label>
           <label>
             <input
@@ -348,7 +319,7 @@ export function TradingChart({
               checked={showVolume}
               onChange={(e) => updatePreferences({ showVolume: e.target.checked })}
             />
-            Volume (next chart load)
+            Volume (next load)
           </label>
         </div>
       )}
