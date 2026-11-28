@@ -134,8 +134,10 @@
   }
 }
 
-.vx-chart-pane.desktop-pane {
-  display: none;
+@media (max-width: 899px) {
+  .vx-chart-pane.desktop-pane {
+    display: none;
+  }
 }
 
 .vx-shell .main-area {
