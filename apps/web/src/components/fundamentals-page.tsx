@@ -5,16 +5,8 @@ import type { EconomicEvent, FundamentalsStatus, MarketNewsArticle } from "@veyt
 import { getEconomicCalendar, getFinancialNews, getFundamentalsStatus } from "@/lib/fundamentals-api";
 
 const CURRENCY_FLAG: Record<string, string> = {
-  USD: "🇺🇸",
-  EUR: "🇪🇺",
-  GBP: "🇬🇧",
-  JPY: "🇯🇵",
-  AUD: "🇦🇺",
-  CAD: "🇨🇦",
-  CHF: "🇨🇭",
-  NZD: "🇳🇿",
-  CNY: "🇨🇳",
-  SGD: "🇸🇬",
+  USD: "🇺🇸", EUR: "🇪🇺", GBP: "🇬🇧", JPY: "🇯🇵", AUD: "🇦🇺",
+  CAD: "🇨🇦", CHF: "🇨🇭", NZD: "🇳🇿", CNY: "🇨🇳", SGD: "🇸🇬",
 };
 
 function flagFor(currency: string) {
@@ -36,20 +28,23 @@ function countdownLabel(iso: string, now: number): string {
 
 function shortAnalysis(ev: EconomicEvent): string {
   const bias = ev.currencyBias ?? "pending";
+  const impact = ev.impact ?? "medium";
   if (ev.actual != null && ev.estimate != null) {
-    const surprise = ev.actual - ev.estimate;
+    const surprise = Number(ev.actual) - Number(ev.estimate);
     const word =
-      surprise > 0
-        ? "above forecast"
-        : surprise < 0
-          ? "below forecast"
-          : "in line";
-    return `${ev.currency} printed ${word}. Pair bias from this release leans ${bias}.`;
+      surprise > 0 ? "above forecast" : surprise < 0 ? "below forecast" : "in line";
+    const lean =
+      bias === "bullish"
+        ? `Stronger ${ev.currency} print supports ${ev.currency}-long / cross short on the quote currency.`
+        : bias === "bearish"
+          ? `Weaker ${ev.currency} print weighs on ${ev.currency}; prefer fades into strength until structure agrees.`
+          : `Bias still mixed — wait for price to confirm.`;
+    return `${ev.event}: actual ${word} (actual ${ev.actual}, forecast ${ev.estimate}). ${lean}`;
   }
   if (bias === "pending") {
-    return `Awaiting release. ${ev.impact}-impact for ${ev.currency} — watch volatility into the print.`;
+    return `${ev.event} is ${impact}-impact for ${ev.currency}. Until the print, treat the window as high noise — size down and avoid fresh entries 15–30m either side.`;
   }
-  return `${ev.currency} bias ${bias} from available figures.`;
+  return `${ev.currency} directional lean is ${bias} from available figures on ${ev.event}. Use this with technical structure, not alone.`;
 }
 
 export function FundamentalsPage() {
@@ -165,7 +160,7 @@ export function FundamentalsPage() {
   );
 
   const viewTabs = (
-    <div className="sig-filters" role="tablist" aria-label="Fundamentals views">
+    <div className="sig-filters" role="tablist">
       <button
         type="button"
         role="tab"
@@ -176,7 +171,7 @@ export function FundamentalsPage() {
           setSelectedId(null);
         }}
       >
-        Economic calendar
+        Calendar
       </button>
       <button
         type="button"
@@ -188,7 +183,7 @@ export function FundamentalsPage() {
           setSelectedId(null);
         }}
       >
-        Forex news
+        Headlines
       </button>
     </div>
   );
@@ -198,27 +193,17 @@ export function FundamentalsPage() {
       <div className="news-screen">
         {viewTabs}
         <div className="news-toolbar">
-          <strong>Latest Forex headlines</strong>
-          <span className="news-count">{news.length} articles</span>
+          <span className="news-count">{news.length} headlines (in-app)</span>
         </div>
-        <p className="news-sub">
-          Headlines and publisher summaries from Finnhub. Open the original source for full reporting.
-        </p>
-        {newsLoading ? <div className="home-empty">Loading Forex news…</div> : null}
-        {newsError ? <div className="inline-error" role="alert">{newsError}</div> : null}
+        {newsLoading ? <div className="home-empty">Loading headlines…</div> : null}
+        {newsError ? <div className="home-empty">{newsError}</div> : null}
         {!newsLoading && !newsError && news.length === 0 ? (
-          <div className="home-empty">No Forex headlines were returned by the provider.</div>
+          <div className="home-empty">No headlines right now</div>
         ) : null}
         {news.map((article) => {
           const published = new Date(article.publishedAt);
           return (
-            <a
-              key={article.id}
-              className="news-row"
-              href={article.url}
-              target="_blank"
-              rel="noopener noreferrer"
-            >
+            <article key={article.id} className="news-row news-row-internal">
               <span className="news-row-time">
                 {published.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
               </span>
@@ -232,13 +217,16 @@ export function FundamentalsPage() {
                 <strong>{article.headline}</strong>
                 {article.summary ? (
                   <span className="news-article-summary">{article.summary}</span>
-                ) : null}
+                ) : (
+                  <span className="news-article-summary">
+                    Shown in-app only. Use Calendar for event bias and affected pairs.
+                  </span>
+                )}
                 {article.related ? (
-                  <span className="news-article-related">Related: {article.related}</span>
+                  <span className="news-article-related">Pairs: {article.related}</span>
                 ) : null}
               </span>
-              <span className="chevron" aria-hidden="true">↗</span>
-            </a>
+            </article>
           );
         })}
       </div>
@@ -254,11 +242,7 @@ export function FundamentalsPage() {
     return (
       <div className="news-screen">
         {viewTabs}
-        <button
-          type="button"
-          className="news-back"
-          onClick={() => setSelectedId(null)}
-        >
+        <button type="button" className="news-back" onClick={() => setSelectedId(null)}>
           ← Back
         </button>
         <article className="news-detail-card">
@@ -266,9 +250,7 @@ export function FundamentalsPage() {
             <span className="news-ccy">
               {flagFor(selected.currency)} {selected.currency}
             </span>
-            <span className={`news-impact ${selected.impact}`}>
-              {selected.impact}
-            </span>
+            <span className={`news-impact ${selected.impact}`}>{selected.impact}</span>
             {cd ? <span className="news-countdown">{cd}</span> : null}
           </div>
           <h2 className="news-detail-title">{selected.event}</h2>
@@ -284,15 +266,11 @@ export function FundamentalsPage() {
           <div className="news-metrics">
             <div>
               <span>Forecast</span>
-              <strong>
-                {selected.estimate != null ? selected.estimate : "—"}
-              </strong>
+              <strong>{selected.estimate != null ? selected.estimate : "—"}</strong>
             </div>
             <div>
               <span>Previous</span>
-              <strong>
-                {selected.previous != null ? selected.previous : "—"}
-              </strong>
+              <strong>{selected.previous != null ? selected.previous : "—"}</strong>
             </div>
             <div>
               <span>Actual</span>
@@ -301,7 +279,7 @@ export function FundamentalsPage() {
           </div>
         </article>
         <section className="news-block">
-          <h3>Read</h3>
+          <h3>What it means</h3>
           <p className="news-means">{shortAnalysis(selected)}</p>
           <div className="news-bias-pill">
             {selected.currency} ·{" "}
@@ -376,20 +354,14 @@ export function FundamentalsPage() {
           </button>
         ))}
         {dayOffset !== 0 ? (
-          <button
-            type="button"
-            className="sig-filter"
-            onClick={() => setDayOffset(0)}
-          >
+          <button type="button" className="sig-filter" onClick={() => setDayOffset(0)}>
             Today
           </button>
         ) : null}
       </div>
       {loading ? <div className="home-empty">Loading calendar…</div> : null}
       {!loading && status?.state !== "connected" ? (
-        <div className="home-empty">
-          {status?.message ?? "Calendar offline"}
-        </div>
+        <div className="home-empty">{status?.message ?? "Calendar offline"}</div>
       ) : null}
       {!loading && status?.state === "connected" && filtered.length === 0 ? (
         <div className="home-empty">No events this day</div>
