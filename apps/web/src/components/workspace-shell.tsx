@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { getMarketStatus } from "@/lib/market-data-api";
 import type { MarketDataStatus } from "@veytrix/shared";
@@ -212,6 +212,7 @@ function RoomDock({
 
 function ShellInner({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const router = useRouter();
   const connection = useMarketConnection();
   const hydrated = useHydrated();
   const feed = useMarketFeed();
@@ -289,7 +290,13 @@ function ShellInner({ children }: { children: React.ReactNode }) {
             <RoomDock
               pathname={pathname}
               collapsed={panelCollapsed}
-              onTogglePanel={() => setPanelCollapsed((value) => !value)}
+              onTogglePanel={() => {
+                if (onChart) {
+                  router.push("/markets");
+                  return;
+                }
+                setPanelCollapsed((value) => !value);
+              }}
               onOpenRoom={() => setPanelCollapsed(false)}
             />
           ) : null}
