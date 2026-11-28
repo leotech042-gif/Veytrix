@@ -16,15 +16,17 @@ export function SectionPage({
   section: string;
   symbol?: string;
 }) {
-  if (section === "markets") return <MarketWatch />;
-  if (section === "charts") {
-    return <ChartsSection symbol={symbol} />;
-  }
+  if (section === "markets") return <MarketsSection />;
+  if (section === "charts") return <ChartsSection symbol={symbol} />;
   if (section === "signals") return <SignalsPage />;
   if (section === "fundamentals") return <FundamentalsPage />;
   if (section === "settings") return <SettingsPage />;
   if (section === "faq") return <FaqPage />;
-  if (section === "privacy" || section === "terms" || section === "risk-disclosure") {
+  if (
+    section === "privacy" ||
+    section === "terms" ||
+    section === "risk-disclosure"
+  ) {
     return (
       <div className="page-heading">
         <h1>{section}</h1>
@@ -35,13 +37,15 @@ export function SectionPage({
   return <Dashboard />;
 }
 
+function MarketsSection() {
+  const feed = useMarketFeed();
+  return <MarketWatch feed={feed} />;
+}
+
 function ChartsSection({ symbol }: { symbol: string }) {
   const feed = useMarketFeed();
   return (
-    <TradingChart
-      instruments={feed.instruments}
-      initialInstrument={symbol}
-    />
+    <TradingChart instruments={feed.instruments} initialInstrument={symbol} />
   );
 }
 
@@ -216,19 +220,30 @@ function SettingsPage() {
 
 function FaqPage() {
   return (
-    <div className="page-heading">
-      <h1>FAQ</h1>
+    <div className="set-screen">
+      <h2 className="set-group-title">FAQ</h2>
       <div className="set-card">
-        <p>
-          <strong>Does Veytrix place trades?</strong>
-          <br />
-          No. Signals and charts are for analysis only.
-        </p>
-        <p>
-          <strong>Where does market data come from?</strong>
-          <br />
-          From the linked Veytrix API / provider status on Settings.
-        </p>
+        <div className="set-row">
+          <div className="set-body">
+            <strong>Does Veytrix place trades?</strong>
+            <span>No. Signals and charts are for analysis only.</span>
+          </div>
+        </div>
+        <div className="set-row">
+          <div className="set-body">
+            <strong>Where does market data come from?</strong>
+            <span>From the linked API — check Status on Settings.</span>
+          </div>
+        </div>
+        <div className="set-row">
+          <div className="set-body">
+            <strong>Why is the chart white?</strong>
+            <span>
+              Chart color is separate from app theme. Change it under Settings →
+              Chart color.
+            </span>
+          </div>
+        </div>
       </div>
     </div>
   );
