@@ -176,6 +176,7 @@ function RoomDock({
         className="vx-room-dock-toggle"
         onClick={onTogglePanel}
         aria-label={collapsed ? "Expand room panel" : "Collapse room panel"}
+        aria-expanded={!collapsed}
         title={collapsed ? "Expand panel" : "Collapse panel"}
       >
         {collapsed ? "‹" : "›"}
