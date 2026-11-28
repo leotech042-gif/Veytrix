@@ -1,8 +1,6 @@
-import { Dashboard } from "@/components/dashboard";
+import { redirect } from "next/navigation";
 
-// This page is intentionally gated until the client-side session check completes.
-export const instant = false;
-
+/** Chart is the core landing page */
 export default function Home() {
-  return <Dashboard />;
+  redirect("/charts");
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { getMarketStatus } from "@/lib/market-data-api";
 import type { MarketDataStatus } from "@veytrix/shared";
@@ -12,32 +12,32 @@ import {
   NotificationsProvider,
 } from "./notifications";
 
+/** Chart first — core workspace */
 const desktopNav = [
-  { href: "/", label: "Home", icon: "home", dock: "home" },
-  { href: "/signals", label: "Signals", icon: "signals", dock: "signals" },
-  { href: "/charts", label: "Chart", icon: "chart", dock: "chart" },
-  { href: "/fundamentals", label: "News", icon: "news", dock: "news" },
-  { href: "/markets", label: "Markets", icon: "markets", dock: "markets" },
-  { href: "/settings", label: "Settings", icon: "settings", dock: "settings" },
-  { href: "/faq", label: "FAQ", icon: "faq", dock: "faq" },
+  { href: "/charts", label: "Chart", icon: "chart" },
+  { href: "/signals", label: "Signals", icon: "signals" },
+  { href: "/markets", label: "Markets", icon: "markets" },
+  { href: "/fundamentals", label: "News", icon: "news" },
+  { href: "/settings", label: "Settings", icon: "settings" },
+  { href: "/faq", label: "FAQ", icon: "faq" },
 ] as const;
 
 const bottomNav = [
-  { href: "/", label: "Home", icon: "home" },
   { href: "/signals", label: "Signals", icon: "signals" },
+  { href: "/markets", label: "Markets", icon: "markets" },
   { href: "/charts", label: "Chart", icon: "chart" },
   { href: "/fundamentals", label: "News", icon: "news" },
-  { href: "/settings", label: "More", icon: "settings" },
-];
+  { href: "/settings", label: "Settings", icon: "settings" },
+] as const;
 
 function NavIcon({ name, active }: { name: string; active?: boolean }) {
   const c = active ? "var(--accent)" : "currentColor";
   const s = 22;
   switch (name) {
-    case "home":
+    case "chart":
       return (
         <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="1.8">
-          <path d="M4 10.5L12 4l8 6.5V20a1 1 0 01-1 1h-5v-6H10v6H5a1 1 0 01-1-1v-9.5z" strokeLinejoin="round" />
+          <path d="M4 19h16M6 16l3-5 3 3 4-7 2 3" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
       );
     case "signals":
@@ -46,10 +46,10 @@ function NavIcon({ name, active }: { name: string; active?: boolean }) {
           <path d="M4 19V12M9 19V5M14 19v-7M19 19V9" strokeLinecap="round" />
         </svg>
       );
-    case "chart":
+    case "markets":
       return (
         <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="1.8">
-          <path d="M4 19h16M6 16l3-5 3 3 4-7 2 3" strokeLinecap="round" strokeLinejoin="round" />
+          <path d="M4 6h16M4 12h16M4 18h10" strokeLinecap="round" />
         </svg>
       );
     case "news":
@@ -64,12 +64,6 @@ function NavIcon({ name, active }: { name: string; active?: boolean }) {
         <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="1.8">
           <circle cx="12" cy="12" r="3" />
           <path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" strokeLinecap="round" />
-        </svg>
-      );
-    case "markets":
-      return (
-        <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="1.8">
-          <path d="M4 6h16M4 12h16M4 18h10" strokeLinecap="round" />
         </svg>
       );
     case "faq":
@@ -124,17 +118,8 @@ function connectionLabel(state: StatusState): string {
   return "Not set";
 }
 
-type DockId = (typeof desktopNav)[number]["dock"];
-
-function dockTitle(id: DockId | null): string {
-  if (!id) return "";
-  const item = desktopNav.find((n) => n.dock === id);
-  return item?.label ?? "";
-}
-
 function ShellInner({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const router = useRouter();
   const connection = useMarketConnection();
   const hydrated = useHydrated();
   const visibleConnection: StatusState = hydrated ? connection : { kind: "checking" };
@@ -143,133 +128,73 @@ function ShellInner({ children }: { children: React.ReactNode }) {
     visibleConnection.status.state === "connected" &&
     !visibleConnection.status.delayed;
 
-  const [dock, setDock] = useState<DockId | null>(null);
-
-  useEffect(() => {
-    // Keep dock in sync with route on first paint / navigation from links
-    if (pathname.startsWith("/charts")) setDock((d) => d ?? "chart");
-    else if (pathname.startsWith("/signals")) setDock((d) => d ?? "signals");
-    else if (pathname.startsWith("/fundamentals")) setDock((d) => d ?? "news");
-    else if (pathname.startsWith("/markets")) setDock((d) => d ?? "markets");
-  }, [pathname]);
-
   if (pathname === "/login") {
     return <>{children}</>;
   }
 
-  function onRailClick(item: (typeof desktopNav)[number]) {
-    if (dock === item.dock) {
-      // Toggle closed if same room already open
-      setDock(null);
-      return;
-    }
-    setDock(item.dock);
-    router.push(item.href);
-  }
-
   return (
-    <div className={`app-shell tv-shell${dock ? " dock-open" : ""}`}>
-      {/* Desktop: narrow icon rail (TradingView-style) */}
-      <aside className="tv-rail desktop-only" aria-label="Workspace rail">
-        <Link className="tv-rail-brand" href="/" aria-label="Veytrix home">
-          <img src="/logo.svg" alt="" width={28} height={28} />
+    <div className="app-shell vx-shell">
+      {/* Desktop left icon rail — navigate only, no fake dock panels */}
+      <aside className="vx-rail" aria-label="Main">
+        <Link className="vx-rail-logo" href="/charts" aria-label="Veytrix chart">
+          <img src="/logo.svg" alt="" width={26} height={26} />
         </Link>
-        <nav className="tv-rail-nav">
+        <nav className="vx-rail-nav">
           {desktopNav.map((item) => {
-            const active =
-              item.href === "/"
-                ? pathname === "/"
-                : pathname.startsWith(item.href);
-            const docked = dock === item.dock;
+            const active = pathname.startsWith(item.href);
             return (
-              <button
+              <Link
                 key={item.href}
-                type="button"
-                className={`tv-rail-btn${active || docked ? " active" : ""}`}
+                href={item.href}
+                className={`vx-rail-link${active ? " active" : ""}`}
                 title={item.label}
                 aria-label={item.label}
-                aria-pressed={docked}
-                onClick={() => onRailClick(item)}
+                aria-current={active ? "page" : undefined}
               >
-                <NavIcon name={item.icon} active={active || docked} />
-              </button>
+                <NavIcon name={item.icon} active={active} />
+                <span className="vx-rail-label">{item.label}</span>
+              </Link>
             );
           })}
         </nav>
-        <div className="tv-rail-foot">
+        <div className="vx-rail-foot">
           <span
             className={`state-dot${isConnected ? " connected" : ""}`}
             title={connectionLabel(visibleConnection)}
           />
-          <ThemeToggle />
         </div>
       </aside>
 
-      {/* Expandable left room / panel — can be closed */}
-      {dock ? (
-        <aside className="tv-dock desktop-only" aria-label={`${dockTitle(dock)} panel`}>
-          <div className="tv-dock-head">
-            <strong>{dockTitle(dock)}</strong>
-            <button
-              type="button"
-              className="tv-dock-close"
-              aria-label="Close panel"
-              onClick={() => setDock(null)}
-            >
-              ✕
-            </button>
-          </div>
-          <div className="tv-dock-body">
-            <p className="tv-dock-hint">
-              {dock === "chart"
-                ? "Chart workspace — drawings stay on the chart. Use the main area for full tools."
-                : dock === "markets"
-                  ? "Watchlist & quotes open in the main view. Close this panel for a wider chart."
-                  : dock === "signals"
-                    ? "Setups and bias load in the main column."
-                    : dock === "news"
-                      ? "Calendar and headlines stay in-app in the main column."
-                      : "Navigate from the rail. Close this panel anytime."}
-            </p>
-            <Link className="tv-dock-link" href={desktopNav.find((n) => n.dock === dock)?.href ?? "/"}>
-              Open full {dockTitle(dock)} →
-            </Link>
-          </div>
-        </aside>
-      ) : null}
-
       <div className="workspace-main">
-        <header className="topbar">
-          <Link className="brand mobile-brand" href="/">
-            <img src="/logo.svg" alt="" className="brand-logo" width={28} height={28} />
-            <span>Veytrix</span>
-          </Link>
-          <div className="top-actions">
+        <header className="topbar vx-topbar">
+          <div className="vx-top-left">
+            <Link className="brand mobile-brand" href="/charts">
+              <img src="/logo.svg" alt="" width={24} height={24} />
+              <span>Veytrix</span>
+            </Link>
             <span className="market-state">
               <span className={`state-dot${isConnected ? " connected" : ""}`} />
               {connectionLabel(visibleConnection)}
             </span>
+          </div>
+          <div className="top-actions">
             <NotificationBell />
-            <span className="mobile-only-inline">
-              <ThemeToggle />
-            </span>
+            <ThemeToggle />
           </div>
         </header>
 
         <main className="main-area">{children}</main>
 
-        {/* Mobile: MT5-style bottom bar */}
+        {/* Mobile MT5-style bottom — Chart is center core */}
         <nav className="mobile-bottom-nav mt5-nav" aria-label="Primary">
           {bottomNav.map((item) => {
-            const active =
-              item.href === "/"
-                ? pathname === "/"
-                : pathname.startsWith(item.href);
+            const active = pathname.startsWith(item.href);
+            const isChart = item.href === "/charts";
             return (
               <Link
                 key={item.href}
                 href={item.href}
-                className={`mobile-bottom-item${active ? " active" : ""}`}
+                className={`mobile-bottom-item${active ? " active" : ""}${isChart ? " mt5-center" : ""}`}
                 aria-current={active ? "page" : undefined}
               >
                 <span className="mt5-ico">
