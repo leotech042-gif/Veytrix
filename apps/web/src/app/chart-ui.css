@@ -1,4 +1,4 @@
-/* Chart — AlienAlgo-style shell (no news under chart) */
+/* Chart — compact shell, pair select, no float tools */
 
 .trading-chart-panel.chart-alien {
   display: flex;
@@ -48,27 +48,11 @@
 }
 
 .chart-float-tools {
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-  padding: 4px 6px;
-  border-radius: 12px;
-  background: var(--surface);
-  border: 1px solid var(--border-subtle);
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
-  flex-shrink: 0;
+  display: none !important;
 }
 
-.chart-float-ico {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  border-radius: 8px;
-  font-size: 13px;
-  font-weight: 700;
-  color: var(--text-secondary);
+.chart-pair-rail {
+  display: none !important;
 }
 
 .chart-alien-canvas {
@@ -97,48 +81,26 @@
   box-shadow: 0 8px 28px rgba(0, 0, 0, 0.06);
 }
 
-.chart-pair-rail {
+.chart-bottom-bar-compact {
   display: flex;
-  gap: 8px;
-  overflow-x: auto;
-  padding-bottom: 2px;
-  -webkit-overflow-scrolling: touch;
-  scrollbar-width: none;
-}
-
-.chart-pair-rail::-webkit-scrollbar {
-  display: none;
-}
-
-.chart-pair-pill {
-  display: inline-flex;
+  flex-direction: row;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 6px;
-  flex-shrink: 0;
-  padding: 8px 12px;
+  gap: 8px;
+}
+
+.chart-pair-select {
+  flex: 1 1 140px;
+  min-width: 120px;
+  appearance: none;
   border-radius: 999px;
-  border: 1px solid var(--border-subtle);
+  border: 1px solid var(--border);
   background: var(--bg-elevated);
   color: var(--text);
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 700;
+  padding: 10px 14px;
   cursor: pointer;
-}
-
-.chart-pair-pill.on {
-  border-color: var(--accent, #c4a574);
-  background: color-mix(in srgb, var(--accent, #c4a574) 16%, transparent);
-}
-
-.chart-pair-pill-flags {
-  letter-spacing: -2px;
-  font-size: 14px;
-}
-
-.chart-bottom-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
 }
 
 .chart-tf-pill {
@@ -211,6 +173,31 @@
   flex: 1;
   height: 100% !important;
   min-height: 0 !important;
+}
+
+.news-row-internal {
+  cursor: default;
+}
+
+.news-row-internal .news-article-summary {
+  display: block;
+  margin-top: 4px;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--text-secondary);
+  font-weight: 400;
+}
+
+.vx-sig-explain {
+  margin: 0 0 10px;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--text-secondary);
+}
+
+.vx-sig-explain.fund {
+  border-left: 2px solid var(--accent, #c4a574);
+  padding-left: 10px;
 }
 
 @media (max-width: 720px) {
