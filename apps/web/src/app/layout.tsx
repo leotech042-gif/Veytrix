@@ -8,6 +8,7 @@ import "./theme-black-gold.css";
 import "./news-ui.css";
 import "./chart-ui.css";
 import "./loader-ui.css";
+import "./shell-ui.css";
 
 export const metadata: Metadata = {
   title: {
